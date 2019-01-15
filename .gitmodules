@@ -1,0 +1,15 @@
+[submodule "glfw"]
+	path = glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "imgui"]
+	path = imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "glm"]
+	path = glm
+	url = https://github.com/g-truc/glm.git
+[submodule "gl3w"]
+	path = gl3w
+	url = https://github.com/skaslev/gl3w.git
+[submodule "stb"]
+	path = stb
+	url = git@github.com:nothings/stb.git
