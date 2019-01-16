@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <ctime>
 
 #include <stb_image_write.h>
 
@@ -28,6 +29,11 @@ GLint uMouse = 0;
 GLint uResolution = 0;
 
 GLuint program = 0;
+
+time_t lastMTime = 0;
+
+const clock_t CheckInterval = 500;
+clock_t lastCheckUpdate = 0;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -77,9 +83,17 @@ void update(void *) {
     static double xpos, ypos;
 
     // check update.
-    // struct stat st;
-    // stat("./assets/basic.frag", &st);
-    // std::cout << st.st_mtime << std::endl;
+    auto now = std::clock();
+    if (now - lastCheckUpdate > CheckInterval) {
+        struct stat st;
+
+        stat("./assets/basic.frag", &st);
+        if (st.st_mtime != lastMTime) {
+            std::cout << st.st_mtime << std::endl;
+            lastMTime = st.st_mtime;
+        }
+        lastCheckUpdate = now;
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -244,6 +258,11 @@ int main(void) {
 
     delete[] vsSource;
     delete[] fsSource;
+
+    // check update.
+    struct stat st;
+    stat("./assets/basic.frag", &st);
+    lastMTime = st.st_mtime;
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);
