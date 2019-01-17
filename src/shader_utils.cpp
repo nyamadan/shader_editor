@@ -20,6 +20,8 @@ int checkLinked(unsigned int program) {
         char *err_log = static_cast<char *>(malloc(sizeof(char) * max_len));
         glGetProgramInfoLog(program, max_len, &max_len, err_log);
 
+        glDeleteProgram(program);
+
         std::cerr << "Program linking failed: " << err_log << std::endl;
         free(err_log);
     }

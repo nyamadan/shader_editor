@@ -18,6 +18,9 @@ namespace {
 const int PositionLocation = 0;
 const int PositionSize = 3;
 
+const char *const DefaultFragmentShader = "assets/default.frag";
+const char *const DefaultVertexShader = "assets/default.vert";
+
 GLFWwindow *window = nullptr;
 
 GLuint vIndex = 0;
@@ -30,10 +33,11 @@ GLint uResolution = 0;
 
 GLuint program = 0;
 
-time_t lastMTime = 0;
-
 const clock_t CheckInterval = 500;
 clock_t lastCheckUpdate = 0;
+
+time_t lastMTimeVS = 0;
+time_t lastMTimeFS = 0;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -78,20 +82,91 @@ void OnGUI() {
     }
 }
 
+void readText(char *&memblock, const char *const path) {
+    std::ifstream file(path, std::ios::in | std::ios::binary | std::ios::ate);
+
+    if (!file.is_open()) {
+        return;
+    }
+
+    const size_t size = static_cast<size_t>(file.tellg());
+    memblock = new char[size + 1];
+    file.seekg(0, std::ios::beg);
+    file.read(memblock, size);
+    memblock[size] = '\0';
+    file.close();
+}
+
+GLuint compileShaders() {
+    char *vsSource = nullptr;
+    readText(vsSource, DefaultVertexShader);
+
+    const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
+    const char *const vsSources[2] = {GlslVersion, vsSource};
+    glShaderSource(handleVS, 2, vsSources, NULL);
+    glCompileShader(handleVS);
+    delete vsSource;
+    if (!checkCompiled(handleVS)) {
+        return 0;
+    }
+
+    char *fsSource = nullptr;
+    readText(fsSource, DefaultFragmentShader);
+
+    const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
+    // const char *const fsSources[2] = {GlslVersion, fsSource};
+    // glShaderSource(handleFS, 2, fsSources, NULL);
+    glShaderSource(handleFS, 1, &fsSource, NULL);
+    glCompileShader(handleFS);
+    delete fsSource;
+    if (!checkCompiled(handleFS)) {
+        return 0;
+    }
+
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, handleVS);
+    glAttachShader(program, handleFS);
+    glLinkProgram(program);
+
+    if (!checkLinked(program)) {
+        return 0;
+    }
+
+    uTime = glGetUniformLocation(program, "time");
+    uMouse = glGetUniformLocation(program, "mouse");
+    uResolution = glGetUniformLocation(program, "resolution");
+
+    glDeleteShader(handleVS);
+    glDeleteShader(handleFS);
+
+    return program;
+}
+
 void update(void *) {
-    static int width, height;
-    static double xpos, ypos;
+    int width, height;
+    double xpos, ypos;
+    clock_t now;
 
     // check update.
-    auto now = std::clock();
+    now = std::clock();
     if (now - lastCheckUpdate > CheckInterval) {
-        struct stat st;
+        struct stat stVS;
+        struct stat stFS;
 
-        stat("./assets/basic.frag", &st);
-        if (st.st_mtime != lastMTime) {
-            std::cout << st.st_mtime << std::endl;
-            lastMTime = st.st_mtime;
+        stat(DefaultVertexShader, &stVS);
+        stat(DefaultFragmentShader, &stFS);
+
+        if (stFS.st_mtime != lastMTimeFS || stVS.st_mtime != lastMTimeVS) {
+            auto newProgram = compileShaders();
+            if (newProgram) {
+                glUseProgram(newProgram);
+                glDeleteProgram(program);
+                program = newProgram;
+            }
+            lastMTimeVS = stVS.st_mtime;
+            lastMTimeFS = stFS.st_mtime;
         }
+
         lastCheckUpdate = now;
     }
 
@@ -117,8 +192,12 @@ void update(void *) {
     }
 
     if (uMouse >= 0) {
-        glUniform2f(uMouse, static_cast<GLfloat>(xpos),
-                    static_cast<GLfloat>(ypos));
+        glUniform2f(uMouse, static_cast<GLfloat>(xpos) / width,
+                    1.0f - static_cast<GLfloat>(ypos) / height);
+    }
+
+    if (uTime >= 0) {
+        glUniform1f(uTime, static_cast<GLfloat>(now) * 0.001f);
     }
 
     glBindVertexArray(vertexArraysObject);
@@ -137,20 +216,6 @@ void update(void *) {
     glfwPollEvents();
 }
 
-static void readText(char *&memblock, const char *const path) {
-    std::ifstream file(path, std::ios::in | std::ios::ate);
-
-    if (!file.is_open()) {
-        return;
-    }
-
-    const size_t size = static_cast<size_t>(file.tellg());
-    memblock = new char[size + 1];
-    file.seekg(0, std::ios::beg);
-    file.read(memblock, size);
-    memblock[size] = '\0';
-    file.close();
-}
 }  // namespace
 
 int main(void) {
@@ -180,7 +245,7 @@ int main(void) {
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    window = glfwCreateWindow(Width, Height, "ShaderEditor", NULL, NULL);
+    window = glfwCreateWindow(Width, Height, "Shader Editor", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -222,47 +287,15 @@ int main(void) {
     glBindVertexArray(0);
 
     // Compile shaders.
-    char *vsSource = nullptr;
-
-    readText(vsSource, "./assets/basic.vert");
-
-    char *fsSource = nullptr;
-
-    readText(fsSource, "./assets/basic.frag");
-
-    const char *const vsSources[2] = {GlslVersion, vsSource};
-    const char *const fsSources[2] = {GlslVersion, fsSource};
-
-    const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(handleVS, 2, vsSources, NULL);
-    glCompileShader(handleVS);
-    assert(checkCompiled(handleVS));
-
-    const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(handleFS, 2, fsSources, NULL);
-    glCompileShader(handleFS);
-    assert(checkCompiled(handleFS));
-
-    program = glCreateProgram();
-    glAttachShader(program, handleVS);
-    glAttachShader(program, handleFS);
-    glLinkProgram(program);
-    assert(checkLinked(program));
-
-    uTime = glGetUniformLocation(program, "time");
-    uMouse = glGetUniformLocation(program, "mouse");
-    uResolution = glGetUniformLocation(program, "resolution");
-
-    glDeleteShader(handleVS);
-    glDeleteShader(handleFS);
-
-    delete[] vsSource;
-    delete[] fsSource;
+    program = compileShaders();
+    assert(program);
 
     // check update.
     struct stat st;
-    stat("./assets/basic.frag", &st);
-    lastMTime = st.st_mtime;
+    stat(DefaultVertexShader, &st);
+    lastMTimeVS = st.st_mtime;
+    stat(DefaultFragmentShader, &st);
+    lastMTimeFS = st.st_mtime;
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);
