@@ -15,11 +15,16 @@
 #include "shader_utils.hpp"
 
 namespace {
-const int PositionLocation = 0;
-const int PositionSize = 3;
-
-const char *const DefaultFragmentShader = "assets/default.frag";
 const char *const DefaultVertexShader = "assets/default.vert";
+const char *const DefaultFragmentShader = "assets/default.frag";
+
+int windowWidth = 1024;
+int windowHeight = 768;
+
+int bufferWidth;
+int bufferHeight;
+
+int positionLocation = 0;
 
 GLFWwindow *window = nullptr;
 
@@ -30,14 +35,19 @@ GLuint vertexArraysObject = 0;
 GLint uTime = 0;
 GLint uMouse = 0;
 GLint uResolution = 0;
-
 GLuint program = 0;
+
+GLuint frameBuffers[2];
+GLuint depthBuffers[2];
+GLuint backBuffers[2];
 
 const clock_t CheckInterval = 500;
 clock_t lastCheckUpdate = 0;
-
 time_t lastMTimeVS = 0;
 time_t lastMTimeFS = 0;
+
+const char *currentVS = DefaultVertexShader;
+const char *currentFS = DefaultFragmentShader;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -52,20 +62,19 @@ void OnGUI() {
     static bool showDemoWindow = false;
     static bool showDebugWindow = true;
 
-    if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New")) {
-            }
-            if (ImGui::MenuItem("Open", "Ctrl+O")) {
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Quit", "Alt+F4")) {
-            }
-            ImGui::EndMenu();
-        }
-
-        ImGui::EndMainMenuBar();
-    }
+    // if (ImGui::BeginMainMenuBar()) {
+    //    if (ImGui::BeginMenu("File")) {
+    //        if (ImGui::MenuItem("New")) {
+    //        }
+    //        if (ImGui::MenuItem("Open", "Ctrl+O")) {
+    //        }
+    //        ImGui::Separator();
+    //        if (ImGui::MenuItem("Quit", "Alt+F4")) {
+    //        }
+    //        ImGui::EndMenu();
+    //    }
+    //    ImGui::EndMainMenuBar();
+    //}
 
     if (showDebugWindow) {
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
@@ -82,11 +91,11 @@ void OnGUI() {
     }
 }
 
-void readText(char *&memblock, const char *const path) {
+bool readText(char *&memblock, const char *const path) {
     std::ifstream file(path, std::ios::in | std::ios::binary | std::ios::ate);
 
     if (!file.is_open()) {
-        return;
+        return false;
     }
 
     const size_t size = static_cast<size_t>(file.tellg());
@@ -95,15 +104,18 @@ void readText(char *&memblock, const char *const path) {
     file.read(memblock, size);
     memblock[size] = '\0';
     file.close();
+
+    return true;
 }
 
-GLuint compileShaders() {
+GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     char *vsSource = nullptr;
-    readText(vsSource, DefaultVertexShader);
+    readText(vsSource, vsPath);
 
     const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
-    const char *const vsSources[2] = {GlslVersion, vsSource};
-    glShaderSource(handleVS, 2, vsSources, NULL);
+    // const char *const vsSources[2] = {GlslVersion, vsSource};
+    // glShaderSource(handleVS, 2, vsSources, NULL);
+    glShaderSource(handleVS, 1, &vsSource, NULL);
     glCompileShader(handleVS);
     delete vsSource;
     if (!checkCompiled(handleVS)) {
@@ -111,7 +123,7 @@ GLuint compileShaders() {
     }
 
     char *fsSource = nullptr;
-    readText(fsSource, DefaultFragmentShader);
+    readText(fsSource, fsPath);
 
     const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
     // const char *const fsSources[2] = {GlslVersion, fsSource};
@@ -132,6 +144,8 @@ GLuint compileShaders() {
         return 0;
     }
 
+    positionLocation = glGetAttribLocation(program, "aPosition");
+
     uTime = glGetUniformLocation(program, "time");
     uMouse = glGetUniformLocation(program, "mouse");
     uResolution = glGetUniformLocation(program, "resolution");
@@ -142,8 +156,35 @@ GLuint compileShaders() {
     return program;
 }
 
+void updateFrameBuffers(GLuint width, GLuint height) {
+    bufferWidth = width;
+    bufferHeight = height;
+
+    for (int i = 0; i < 2; i++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
+
+        glBindRenderbuffer(GL_RENDERBUFFER, depthBuffers[i]);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
+                              bufferWidth, bufferHeight);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                  GL_RENDERBUFFER, depthBuffers[i]);
+
+        glBindTexture(GL_TEXTURE_2D, backBuffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bufferWidth, bufferHeight, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, backBuffers[i], 0);
+    }
+}
+
 void update(void *) {
-    int width, height;
+    int currentWidth, currentHeight;
     double xpos, ypos;
     clock_t now;
 
@@ -153,21 +194,37 @@ void update(void *) {
         struct stat stVS;
         struct stat stFS;
 
-        stat(DefaultVertexShader, &stVS);
-        stat(DefaultFragmentShader, &stFS);
+        stat(currentVS, &stVS);
+        stat(currentFS, &stFS);
 
         if (stFS.st_mtime != lastMTimeFS || stVS.st_mtime != lastMTimeVS) {
-            auto newProgram = compileShaders();
+            auto newProgram = linkProgram(currentVS, currentFS);
             if (newProgram) {
                 glUseProgram(newProgram);
                 glDeleteProgram(program);
                 program = newProgram;
+
+                glBindVertexArray(vertexArraysObject);
+                glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+                glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE,
+                                      0, 0);
+                glBindVertexArray(0);
             }
             lastMTimeVS = stVS.st_mtime;
             lastMTimeFS = stFS.st_mtime;
         }
 
         lastCheckUpdate = now;
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwGetFramebufferSize(window, &currentWidth, &currentHeight);
+    glfwGetCursorPos(window, &xpos, &ypos);
+
+    if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
+        windowWidth = currentWidth;
+        windowHeight = currentHeight;
+        updateFrameBuffers(currentWidth, currentHeight);
     }
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -178,22 +235,21 @@ void update(void *) {
 
     ImGui::Render();
 
-    glfwMakeContextCurrent(window);
-    glfwGetFramebufferSize(window, &width, &height);
-    glfwGetCursorPos(window, &xpos, &ypos);
-    glViewport(0, 0, width, height);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[0]);
+
+    glViewport(0, 0, windowWidth, windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(program);
 
     if (uResolution >= 0) {
-        glUniform2f(uResolution, static_cast<GLfloat>(width),
-                    static_cast<GLfloat>(height));
+        glUniform2f(uResolution, static_cast<GLfloat>(bufferWidth),
+                    static_cast<GLfloat>(bufferHeight));
     }
 
     if (uMouse >= 0) {
-        glUniform2f(uMouse, static_cast<GLfloat>(xpos) / width,
-                    1.0f - static_cast<GLfloat>(ypos) / height);
+        glUniform2f(uMouse, static_cast<GLfloat>(xpos) / bufferWidth,
+                    1.0f - static_cast<GLfloat>(ypos) / bufferHeight);
     }
 
     if (uTime >= 0) {
@@ -206,6 +262,12 @@ void update(void *) {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     glfwMakeContextCurrent(window);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, backBuffers[0]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, bufferWidth, bufferHeight, 0, 0, windowWidth,
+                      windowHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
     glfwSwapBuffers(window);
 
     for (GLint error = glGetError(); error; error = glGetError()) {
@@ -219,10 +281,6 @@ void update(void *) {
 }  // namespace
 
 int main(void) {
-    const int Width = 1024;
-    const int Height = 768;
-    const int Step = 10;
-
     /* Initialize the library */
     if (!glfwInit()) return -1;
 
@@ -245,7 +303,8 @@ int main(void) {
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-    window = glfwCreateWindow(Width, Height, "Shader Editor", NULL, NULL);
+    window = glfwCreateWindow(windowWidth, windowHeight, "Shader Editor", NULL,
+                              NULL);
     if (!window) {
         glfwTerminate();
         return -1;
@@ -266,6 +325,10 @@ int main(void) {
 
     glfwMakeContextCurrent(window);
 
+    // Compile shaders.
+    program = linkProgram(currentVS, currentFS);
+    assert(program);
+
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
@@ -275,8 +338,7 @@ int main(void) {
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 12, positions,
                  GL_STATIC_DRAW);
-    glVertexAttribPointer(PositionLocation, PositionSize, GL_FLOAT, GL_FALSE, 0,
-                          0);
+    glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * 6, indices,
@@ -286,15 +348,22 @@ int main(void) {
 
     glBindVertexArray(0);
 
-    // Compile shaders.
-    program = compileShaders();
-    assert(program);
+    // Framebuffers
+    glGenFramebuffers(2, frameBuffers);
+    glGenRenderbuffers(2, depthBuffers);
+    glGenTextures(2, backBuffers);
+
+    updateFrameBuffers(windowWidth, windowHeight);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // check update.
     struct stat st;
-    stat(DefaultVertexShader, &st);
+    stat(currentVS, &st);
     lastMTimeVS = st.st_mtime;
-    stat(DefaultFragmentShader, &st);
+    stat(currentFS, &st);
     lastMTimeFS = st.st_mtime;
 
 #ifndef __EMSCRIPTEN__
