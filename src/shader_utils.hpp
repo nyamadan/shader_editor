@@ -3,4 +3,4 @@
 extern const char* const GlslVersion;
 
 int checkLinked(unsigned int program);
-int checkCompiled(unsigned int shader);
+int checkCompiled(unsigned int shader, const char* const path = nullptr);

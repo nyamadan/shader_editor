@@ -1,5 +1,6 @@
-#include "shader_utils.hpp"
 #include "common.hpp"
+#include "shader_utils.hpp"
+#include "app_log.hpp"
 
 #include <iostream>
 
@@ -29,7 +30,7 @@ int checkLinked(unsigned int program) {
     return success;
 }
 
-int checkCompiled(unsigned int shader) {
+int checkCompiled(unsigned int shader, const char *const path) {
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 
@@ -41,7 +42,8 @@ int checkCompiled(unsigned int shader) {
         glGetShaderInfoLog(shader, max_len, &max_len, err_log);
         glDeleteShader(shader);
 
-        std::cerr << "Shader compilation failed: " << err_log << std::endl;
+        GetAppLog().AddLog("Shader compilation failed: %s\n%s\n",
+                           path == nullptr ? "" : path, err_log);
 
         free(err_log);
     }

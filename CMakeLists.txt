@@ -3,6 +3,7 @@ project(shader_editor VERSION 0.1.0)
 
 set(APP_SOURCES
     src/main.cpp
+    src/app_log.cpp
     src/shader_utils.cpp
 )
 
@@ -32,7 +33,7 @@ add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
 
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
-    set(CMAKE_EXE_LINKER_FLAGS "--embed-file ${PROJECT_SOURCE_DIR}/assets@assets --no-heap-copy -s USE_WEBGL2=1 -s USE_GLFW=3 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
+    set(CMAKE_EXE_LINKER_FLAGS "--embed-file ${PROJECT_SOURCE_DIR}/default@default --no-heap-copy -s USE_WEBGL2=1 -s USE_GLFW=3 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
 
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES})
 elseif(MSVC)
