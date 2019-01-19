@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <ctime>
 
 #include <stb_image_write.h>
@@ -56,6 +57,12 @@ clock_t lastCheckUpdate = 0;
 time_t lastMTimeVS = 0;
 time_t lastMTimeFS = 0;
 time_t timeStart = 0;
+
+uint8_t *rgbBuffer = nullptr;
+uint8_t *yuvBuffer = nullptr;
+time_t currentFrame = 0;
+time_t frameEnd = 0;
+std::ofstream fVideo;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -158,25 +165,39 @@ void updateFrameBuffers(GLuint width, GLuint height) {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                GL_TEXTURE_2D, backBuffers[i], 0);
     }
+
+    if (rgbBuffer != nullptr) {
+        delete[] rgbBuffer;
+    }
+    if (yuvBuffer != nullptr) {
+        delete[] yuvBuffer;
+    }
+
+    rgbBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
+    yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
 void update(void *) {
-    int currentWidth, currentHeight;
-    double xpos, ypos;
-
     // ImGUI
     static bool showImGuiDemoWindow = false;
     static bool showDebugWindow = true;
     static bool showAppLogWindow = false;
 
+    static int uiBufferQuality = 1;
     static bool uiPlaying = true;
-    static bool uiSyncWindow = true;
     static float uiTimeValue = 0;
+    static int uiVideoResolution = 2;
+    static int uiVideoFrame = 90;
 
     // Uniforms
     float uTimeValue;
     glm::vec2 uResolutionValue;
     glm::vec2 uMouseValue;
+
+    int currentWidth, currentHeight;
+    double xpos, ypos;
+    float bufferScale =
+        1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
 
     // check update.
     clock_t now = std::clock();
@@ -212,10 +233,12 @@ void update(void *) {
     glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
     glfwGetCursorPos(mainWindow, &xpos, &ypos);
 
-    // update buffer width
-    if (uiSyncWindow) {
+    // onResizeWindow
+    if (frameEnd == 0) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
-            updateFrameBuffers(currentWidth, currentHeight);
+            updateFrameBuffers(
+                static_cast<GLuint>(currentWidth * bufferScale),
+                static_cast<GLuint>(currentHeight * bufferScale));
         }
     }
 
@@ -223,15 +246,21 @@ void update(void *) {
     windowHeight = currentHeight;
 
     // uniform values
-    uTimeValue = static_cast<GLfloat>(now - timeStart) * 0.001f;
     uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
     uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
-    uMouseValue.x = static_cast<GLfloat>(xpos) / bufferWidth;
-    uMouseValue.y = 1.0f - static_cast<GLfloat>(ypos) / bufferHeight;
+    uMouseValue.x = static_cast<GLfloat>(xpos) * bufferScale / (bufferWidth);
+    uMouseValue.y =
+        1.0f - static_cast<GLfloat>(ypos) * bufferScale / (bufferHeight);
 
-    if (!uiPlaying) {
-        timeStart = now - static_cast<clock_t>(uiTimeValue * 1000.0f);
-        uTimeValue = uiTimeValue;
+    if (frameEnd > 0) {
+        uTimeValue = currentFrame * 30.0f / 1001.0f;
+    } else {
+        if (!uiPlaying) {
+            timeStart = now - static_cast<clock_t>(uiTimeValue * 1000.0f);
+            uTimeValue = uiTimeValue;
+        } else {
+            uTimeValue = static_cast<GLfloat>(now - timeStart) * 0.001f;
+        }
     }
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -240,26 +269,41 @@ void update(void *) {
 
     if (showDebugWindow) {
         if (ImGui::CollapsingHeader("Stats")) {
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                        1000.0f / ImGui::GetIO().Framerate,
-                        ImGui::GetIO().Framerate);
+            std::stringstream ss;
+
+            ss.str(std::string());
+            ss << 1000.0f / ImGui::GetIO().Framerate;
+            ImGui::LabelText("ms/frame", ss.str().c_str());
+
+            ss.str(std::string());
+            ss << ImGui::GetIO().Framerate;
+            ImGui::LabelText("fps", ss.str().c_str());
         }
 
         if (ImGui::CollapsingHeader("Uniforms")) {
-            ImGui::Text("time: %.3f", uTimeValue);
-            ImGui::Text("resolution: %.1f, %.1f", uResolutionValue.x,
-                        uResolutionValue.y);
-            ImGui::Text("mouse: %.3f, %.3f", uMouseValue.x, uMouseValue.y);
+            std::stringstream ss;
+
+            ss.str(std::string());
+            ss << uTimeValue;
+            ImGui::LabelText("time", ss.str().c_str());
+
+            ss.str(std::string());
+            ss << uResolutionValue.x << ", " << uResolutionValue.y;
+            ImGui::LabelText("resolution", ss.str().c_str());
+
+            ss.str(std::string());
+            ss << uMouseValue.x << ", " << uMouseValue.y;
+            ImGui::LabelText("mouse", ss.str().c_str());
+            ss.clear();
         }
 
         if (ImGui::CollapsingHeader("Time")) {
-            ImGui::Text("Time:");
             if (uiPlaying) {
-                ImGui::Text("%.3f sec", uTimeValue);
+                std::stringstream ss;
+                ss << uTimeValue;
+                ImGui::LabelText("time", ss.str().c_str());
             } else {
-                ImGui::PushItemWidth(200.0f);
-                ImGui::DragFloat("sec", &uiTimeValue, 0.5f);
-                ImGui::PopItemWidth();
+                ImGui::DragFloat("time", &uiTimeValue, 0.5f);
             }
 
             if (ImGui::Checkbox("Playing", &uiPlaying)) {
@@ -274,7 +318,113 @@ void update(void *) {
         }
 
         if (ImGui::CollapsingHeader("Buffer")) {
-            ImGui::Checkbox("Sync", &uiSyncWindow);
+            const char *items[] = {"0.5", "1", "2", "4", "8"};
+            if (ImGui::Combo("quality", &uiBufferQuality, items,
+                             IM_ARRAYSIZE(items))) {
+                // update framebuffers
+                bufferScale =
+                    1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
+                updateFrameBuffers(
+                    static_cast<float>(currentWidth) * bufferScale,
+                    static_cast<float>(currentHeight) * bufferScale);
+
+                // uniform values
+                uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
+                uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
+                uMouseValue.x =
+                    static_cast<GLfloat>(xpos) * bufferScale / (bufferWidth);
+                uMouseValue.y = 1.0f - static_cast<GLfloat>(ypos) *
+                                           bufferScale / (bufferHeight);
+            }
+
+            std::stringstream windowStringStream;
+            windowStringStream << windowWidth << ", " << windowHeight;
+            ImGui::LabelText("window", windowStringStream.str().c_str());
+
+            std::stringstream bufferStringStream;
+            bufferStringStream << bufferWidth << ", " << bufferHeight;
+            ImGui::LabelText("buffer", bufferStringStream.str().c_str());
+        }
+
+        if (ImGui::CollapsingHeader("Export")) {
+            const char *items[] = {"256x144",   "427x240",  "640x360",
+                                   "720x480",   "1280x720", "1920x1080",
+                                   "2560x1440", "3840x2160"};
+
+            if (ImGui::Combo("resolution", &uiVideoResolution, items,
+                             IM_ARRAYSIZE(items))) {
+            }
+
+            ImGui::DragInt("frame", &uiVideoFrame, 1.0f, 1, 65536, "%d");
+
+            std::stringstream ss;
+            ss.str(std::string());
+            ss << static_cast<float>(uiVideoFrame) * 1001.0f / 30000.0f << " s";
+            ImGui::LabelText("length", ss.str().c_str());
+
+            ss.str(std::string());
+            ss << 30000.0f / 1001.0f << " hz";
+            ImGui::LabelText("framerate", ss.str().c_str());
+
+            if (ImGui::Button("Run")) {
+                frameEnd = uiVideoFrame;
+                currentFrame = 0;
+                uTimeValue = 0;
+
+                switch (uiVideoResolution) {
+                    case 0:
+                        updateFrameBuffers(256, 144);
+                        break;
+                    case 1:
+                        updateFrameBuffers(427, 240);
+                        break;
+                    case 2:
+                        updateFrameBuffers(640, 360);
+                        break;
+                    case 3:
+                        updateFrameBuffers(720, 480);
+                        break;
+                    case 4:
+                        updateFrameBuffers(1280, 720);
+                        break;
+                    case 5:
+                        updateFrameBuffers(1920, 1080);
+                        break;
+                    case 6:
+                        updateFrameBuffers(2560, 1440);
+                        break;
+                    case 7:
+                        updateFrameBuffers(3840, 2160);
+                        break;
+                }
+
+                fVideo = std::ofstream("video.y4m",
+                                       std::ios::out | std::ios::binary);
+
+                fVideo << "YUV4MPEG2 W" << bufferWidth << " H" << bufferHeight
+                       << " F30000:1001 Ip A0:0 C444 XYSCSS=444" << std::endl;
+
+                ImGui::OpenPopup("Export");
+            }
+
+            if (ImGui::BeginPopupModal("Export", NULL,
+                                       ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (frameEnd == 0) {
+                    ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
+
+                    ImGui::Separator();
+
+                    if (ImGui::Button("OK", ImVec2(120, 0))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                } else {
+                    ImGui::ProgressBar(
+                        static_cast<float>(currentFrame) / frameEnd,
+                        ImVec2(200.0f, 15.0f));
+                }
+
+                ImGui::EndPopup();
+            }
         }
 
         if (ImGui::CollapsingHeader("Window")) {
@@ -320,6 +470,43 @@ void update(void *) {
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 
+    if (frameEnd != 0) {
+        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGB, GL_UNSIGNED_BYTE,
+                     rgbBuffer);
+
+        for (int x = 0; x < bufferWidth; x++) {
+            for (int y = 0; y < bufferHeight; y++) {
+                const int i = y * bufferWidth + x;
+                const int j = i * 3;
+                const int size = bufferWidth * bufferHeight;
+                const uint8_t R = rgbBuffer[j + 0];
+                const uint8_t G = rgbBuffer[j + 1];
+                const uint8_t B = rgbBuffer[j + 2];
+                const uint8_t Y =
+                    static_cast<uint8_t>(0.299 * R + 0.587 * G + 0.114 * B);
+                const uint8_t U = static_cast<uint8_t>(-0.169 * R - 0.331 * G +
+                                                       0.5 * B + 128);
+                const uint8_t V =
+                    static_cast<uint8_t>(0.5 * R - 0.419 * G - 0.081 * B + 128);
+
+                yuvBuffer[i] = Y;
+                yuvBuffer[i + size] = U;
+                yuvBuffer[i + size * 2] = V;
+            }
+        }
+
+        fVideo << "FRAME" << std::endl;
+        fVideo.write(reinterpret_cast<char *>(yuvBuffer),
+                     bufferWidth * bufferHeight * 3);
+
+        currentFrame++;
+
+        if (frameEnd <= currentFrame) {
+            fVideo.close();
+            frameEnd = 0;
+        }
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, backBuffers[0]);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -337,7 +524,6 @@ void update(void *) {
 
     glfwPollEvents();
 }
-
 }  // namespace
 
 int main(void) {
@@ -354,7 +540,6 @@ int main(void) {
     currentVS.append(DefaultVertexShaderName);
 
     currentFS = DefaultAssetPath;
-    std::cout << currentFS.back();
 #ifdef WIN32
     if (currentFS.back() != '\\' && currentFS.back() != '/') {
         currentFS.append("\\");
@@ -366,40 +551,6 @@ int main(void) {
 #endif
     currentFS.append(DefaultFragmentShaderName);
 
-    if (false) {
-        FILE *fp = fopen("video.y4m", "wb");
-        fprintf(fp,
-                "YUV4MPEG2 W480 H270 F30000:1001 Ip A1:1 C444 XYSCSS=444\n");
-        for (int i = 0; i < 60; i++) {
-            fprintf(fp, "FRAME\n");
-
-            uint8_t r = 0xff;
-            uint8_t g = 0x00;
-            uint8_t b = 0x00;
-
-            for (int x = 0; x < 480; x++) {
-                for (int y = 0; y < 270; y++) {
-                    uint8_t Y = 0.299 * r + 0.587 * g + 0.114 * b;
-                    fwrite(&Y, sizeof(uint8_t), 1, fp);
-                }
-            }
-
-            for (int x = 0; x < 480; x++) {
-                for (int y = 0; y < 270; y++) {
-                    uint8_t U = -0.169 * r - 0.331 * g + 0.5 * b + 128;
-                    fwrite(&U, sizeof(uint8_t), 1, fp);
-                }
-            }
-
-            for (int x = 0; x < 480; x++) {
-                for (int y = 0; y < 270; y++) {
-                    uint8_t V = 0.5 * r - 0.419 * g - 0.081 * b + 128;
-                    fwrite(&V, sizeof(uint8_t), 1, fp);
-                }
-            }
-        }
-        fclose(fp);
-    }
     if (!glfwInit()) return -1;
 
     glfwSetErrorCallback(glfwErrorCallback);
