@@ -1,7 +1,17 @@
 #include <stdio.h>
+
+#include <fcntl.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 
-#include <fstream>
+#ifdef WIN32
+#include <io.h>
+#define open _open
+#define fdopen _fdopen
+#else
+#define O_BINARY 0x0000
+#endif
+
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -29,8 +39,8 @@ std::string assetPath;
 std::string currentVS;
 std::string currentFS;
 
-int windowWidth = 1024;
-int windowHeight = 768;
+int windowWidth = 512;
+int windowHeight = 512;
 
 int bufferWidth;
 int bufferHeight;
@@ -62,7 +72,7 @@ uint8_t *rgbBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 time_t currentFrame = 0;
 time_t frameEnd = 0;
-std::ofstream fVideo;
+FILE *fVideo;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -74,18 +84,21 @@ void glfwErrorCallback(int error, const char *description) {
 }
 
 bool ReadText(char *&memblock, const char *const path) {
-    std::ifstream file(path, std::ios::in | std::ios::binary | std::ios::ate);
+    FILE *fp;
+    int fd;
+    struct stat st;
+    size_t size;
 
-    if (!file.is_open()) {
-        return false;
-    }
+    fd = open(path, O_RDONLY | O_BINARY);
 
-    const size_t size = static_cast<size_t>(file.tellg());
+    fp = fdopen(fd, "rb");
+    fstat(fd, &st);
+    size = st.st_size;
+
     memblock = new char[size + 1];
-    file.seekg(0, std::ios::beg);
-    file.read(memblock, size);
+    fread(memblock, sizeof(char), size, fp);
     memblock[size] = '\0';
-    file.close();
+    fclose(fp);
 
     return true;
 }
@@ -273,11 +286,11 @@ void update(void *) {
 
             ss.str(std::string());
             ss << 1000.0f / ImGui::GetIO().Framerate;
-            ImGui::LabelText("ms/frame", ss.str().c_str());
+            ImGui::LabelText("ms/frame", "%s", ss.str().c_str());
 
             ss.str(std::string());
             ss << ImGui::GetIO().Framerate;
-            ImGui::LabelText("fps", ss.str().c_str());
+            ImGui::LabelText("fps", "%s", ss.str().c_str());
         }
 
         if (ImGui::CollapsingHeader("Uniforms")) {
@@ -285,15 +298,15 @@ void update(void *) {
 
             ss.str(std::string());
             ss << uTimeValue;
-            ImGui::LabelText("time", ss.str().c_str());
+            ImGui::LabelText("time", "%s", ss.str().c_str());
 
             ss.str(std::string());
             ss << uResolutionValue.x << ", " << uResolutionValue.y;
-            ImGui::LabelText("resolution", ss.str().c_str());
+            ImGui::LabelText("resolution", "%s", ss.str().c_str());
 
             ss.str(std::string());
             ss << uMouseValue.x << ", " << uMouseValue.y;
-            ImGui::LabelText("mouse", ss.str().c_str());
+            ImGui::LabelText("mouse", "%s", ss.str().c_str());
             ss.clear();
         }
 
@@ -301,7 +314,7 @@ void update(void *) {
             if (uiPlaying) {
                 std::stringstream ss;
                 ss << uTimeValue;
-                ImGui::LabelText("time", ss.str().c_str());
+                ImGui::LabelText("time", "%s", ss.str().c_str());
             } else {
                 ImGui::DragFloat("time", &uiTimeValue, 0.5f);
             }
@@ -325,8 +338,8 @@ void update(void *) {
                 bufferScale =
                     1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
                 updateFrameBuffers(
-                    static_cast<float>(currentWidth) * bufferScale,
-                    static_cast<float>(currentHeight) * bufferScale);
+                    static_cast<GLuint>(currentWidth * bufferScale),
+                    static_cast<GLuint>(currentHeight * bufferScale));
 
                 // uniform values
                 uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
@@ -339,11 +352,11 @@ void update(void *) {
 
             std::stringstream windowStringStream;
             windowStringStream << windowWidth << ", " << windowHeight;
-            ImGui::LabelText("window", windowStringStream.str().c_str());
+            ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
 
             std::stringstream bufferStringStream;
             bufferStringStream << bufferWidth << ", " << bufferHeight;
-            ImGui::LabelText("buffer", bufferStringStream.str().c_str());
+            ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
         }
 
         if (ImGui::CollapsingHeader("Export")) {
@@ -360,11 +373,11 @@ void update(void *) {
             std::stringstream ss;
             ss.str(std::string());
             ss << static_cast<float>(uiVideoFrame) * 1001.0f / 30000.0f << " s";
-            ImGui::LabelText("length", ss.str().c_str());
+            ImGui::LabelText("length", "%s", ss.str().c_str());
 
             ss.str(std::string());
             ss << 30000.0f / 1001.0f << " hz";
-            ImGui::LabelText("framerate", ss.str().c_str());
+            ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
             if (ImGui::Button("Run")) {
                 frameEnd = uiVideoFrame;
@@ -398,11 +411,12 @@ void update(void *) {
                         break;
                 }
 
-                fVideo = std::ofstream("video.y4m",
-                                       std::ios::out | std::ios::binary);
+                fVideo = fopen("video.y4m", "wb");
 
-                fVideo << "YUV4MPEG2 W" << bufferWidth << " H" << bufferHeight
-                       << " F30000:1001 Ip A0:0 C444 XYSCSS=444" << std::endl;
+                fprintf(
+                    fVideo,
+                    "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C444 XYSCSS=444\n",
+                    bufferWidth, bufferHeight);
 
                 ImGui::OpenPopup("Export");
             }
@@ -495,19 +509,19 @@ void update(void *) {
             }
         }
 
-        fVideo << "FRAME" << std::endl;
-        fVideo.write(reinterpret_cast<char *>(yuvBuffer),
-                     bufferWidth * bufferHeight * 3);
+        fputs("FRAME\n", fVideo);
+        fwrite(yuvBuffer, sizeof(uint8_t), bufferWidth * bufferHeight * 3,
+               fVideo);
 
         currentFrame++;
 
         if (frameEnd <= currentFrame) {
-            fVideo.close();
+            fclose(fVideo);
+            fVideo = nullptr;
             frameEnd = 0;
         }
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, backBuffers[0]);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, bufferWidth, bufferHeight, 0, 0, windowWidth,
