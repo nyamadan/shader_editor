@@ -39,8 +39,8 @@ std::string assetPath;
 std::string currentVS;
 std::string currentFS;
 
-int windowWidth = 512;
-int windowHeight = 512;
+int windowWidth = 1024;
+int windowHeight = 768;
 
 int bufferWidth;
 int bufferHeight;
