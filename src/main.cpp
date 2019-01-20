@@ -15,7 +15,6 @@
 #include <string>
 #include <iostream>
 #include <sstream>
-#include <ctime>
 
 #include <stb_image_write.h>
 
@@ -31,13 +30,16 @@
 #include "app_log.hpp"
 
 namespace {
+
 const char *const DefaultAssetPath = "default";
 const char *const DefaultVertexShaderName = "vert.glsl";
 const char *const DefaultFragmentShaderName = "frag.glsl";
+const char *const CopyFragmentShaderName = "copy.glsl";
 
 std::string assetPath;
 std::string currentVS;
 std::string currentFS;
+std::string copyFS;
 
 int windowWidth = 1024;
 int windowHeight = 768;
@@ -58,15 +60,20 @@ GLint uMouse = 0;
 GLint uResolution = 0;
 GLuint program = 0;
 
+GLint uCopyResolution = 0;
+GLint uCopyBackBuffer = 0;
+GLuint copyProgram = 0;
+
 GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
 
-const clock_t CheckInterval = 500;
-clock_t lastCheckUpdate = 0;
+const float CheckInterval = 0.5f;
+float lastCheckUpdate = 0;
+float timeStart = 0;
+
 time_t lastMTimeVS = 0;
 time_t lastMTimeFS = 0;
-time_t timeStart = 0;
 
 uint8_t *rgbBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
@@ -108,8 +115,6 @@ GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     ReadText(vsSource, vsPath);
 
     const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
-    // const char *const vsSources[2] = {GlslVersion, vsSource};
-    // glShaderSource(handleVS, 2, vsSources, NULL);
     glShaderSource(handleVS, 1, &vsSource, NULL);
     glCompileShader(handleVS);
     if (!checkCompiled(handleVS, vsPath)) {
@@ -122,8 +127,6 @@ GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     ReadText(fsSource, fsPath);
 
     const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
-    // const char *const fsSources[2] = {GlslVersion, fsSource};
-    // glShaderSource(handleFS, 2, fsSources, NULL);
     glShaderSource(handleFS, 1, &fsSource, NULL);
     glCompileShader(handleFS);
     if (!checkCompiled(handleFS, fsPath)) {
@@ -140,12 +143,6 @@ GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     if (!checkLinked(program)) {
         return 0;
     }
-
-    positionLocation = glGetAttribLocation(program, "aPosition");
-
-    uTime = glGetUniformLocation(program, "time");
-    uMouse = glGetUniformLocation(program, "mouse");
-    uResolution = glGetUniformLocation(program, "resolution");
 
     glDeleteShader(handleVS);
     glDeleteShader(handleFS);
@@ -212,8 +209,8 @@ void update(void *) {
     float bufferScale =
         1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
 
-    // check update.
-    clock_t now = std::clock();
+    float now = static_cast<float>(ImGui::GetTime());
+
     if (now - lastCheckUpdate > CheckInterval) {
         struct stat stVS;
         struct stat stFS;
@@ -224,6 +221,11 @@ void update(void *) {
         if (stFS.st_mtime != lastMTimeFS || stVS.st_mtime != lastMTimeVS) {
             GLuint newProgram =
                 linkProgram(currentVS.c_str(), currentFS.c_str());
+
+            positionLocation = glGetAttribLocation(program, "aPosition");
+            uTime = glGetUniformLocation(program, "time");
+            uMouse = glGetUniformLocation(program, "mouse");
+            uResolution = glGetUniformLocation(program, "resolution");
             if (newProgram) {
                 glUseProgram(newProgram);
                 glDeleteProgram(program);
@@ -261,18 +263,18 @@ void update(void *) {
     // uniform values
     uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
     uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
-    uMouseValue.x = static_cast<GLfloat>(xpos) * bufferScale / (bufferWidth);
+    uMouseValue.x = static_cast<GLfloat>(xpos) / windowWidth;
     uMouseValue.y =
-        1.0f - static_cast<GLfloat>(ypos) * bufferScale / (bufferHeight);
+        1.0f - static_cast<GLfloat>(ypos) / windowHeight;
 
     if (frameEnd > 0) {
         uTimeValue = currentFrame * 30.0f / 1001.0f;
     } else {
         if (!uiPlaying) {
-            timeStart = now - static_cast<clock_t>(uiTimeValue * 1000.0f);
+            timeStart = now - uiTimeValue;
             uTimeValue = uiTimeValue;
         } else {
-            uTimeValue = static_cast<GLfloat>(now - timeStart) * 0.001f;
+            uTimeValue = now;
         }
     }
 
@@ -463,7 +465,6 @@ void update(void *) {
     ImGui::Render();
 
     glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[0]);
-
     glViewport(0, 0, bufferWidth, bufferHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -522,10 +523,25 @@ void update(void *) {
         }
     }
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, backBuffers[0]);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, bufferWidth, bufferHeight, 0, 0, windowWidth,
-                      windowHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    // copy to frontbuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, windowWidth, windowHeight);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(copyProgram);
+
+    if (uCopyResolution >= 0) {
+        glm::vec2 uCopyResolutionValue(windowWidth, windowHeight);
+        glUniform2fv(uCopyResolution, 1, glm::value_ptr(uCopyResolutionValue));
+    }
+
+    if (uCopyBackBuffer >= 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, backBuffers[0]);
+        glUniform1i(uCopyBackBuffer, 0);
+    }
+
+    glBindVertexArray(vertexArraysObject);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwMakeContextCurrent(mainWindow);
@@ -564,6 +580,18 @@ int main(void) {
     }
 #endif
     currentFS.append(DefaultFragmentShaderName);
+
+    copyFS = DefaultAssetPath;
+#ifdef WIN32
+    if (copyFS.back() != '\\' && copyFS.back() != '/') {
+        copyFS.append("\\");
+    }
+#else
+    if (copyFS.back() != '/') {
+        copyFS.append("/");
+    }
+#endif
+    copyFS.append(CopyFragmentShaderName);
 
     if (!glfwInit()) return -1;
 
@@ -614,6 +642,17 @@ int main(void) {
     program = linkProgram(currentVS.c_str(), currentFS.c_str());
     assert(program);
 
+    // getProgramLocation
+    positionLocation = glGetAttribLocation(program, "aPosition");
+    uTime = glGetUniformLocation(program, "time");
+    uMouse = glGetUniformLocation(program, "mouse");
+    uResolution = glGetUniformLocation(program, "resolution");
+
+    copyProgram = linkProgram(currentVS.c_str(), copyFS.c_str());
+    assert(copyProgram);
+    uCopyResolution = glGetUniformLocation(copyProgram, "resolution");
+    uCopyBackBuffer = glGetUniformLocation(copyProgram, "backbuffer");
+
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
@@ -651,7 +690,7 @@ int main(void) {
     stat(currentFS.c_str(), &st);
     lastMTimeFS = st.st_mtime;
 
-    timeStart = std::clock();
+    timeStart = static_cast<float>(ImGui::GetTime());
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);

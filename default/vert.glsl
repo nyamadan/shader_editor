@@ -1,13 +1,13 @@
 #if GL_ES
-#define HALF mediump
+#define half2 mediump vec2
 #else
-#define HALF
+#define half2 vec2
 #endif
 
 attribute vec3 aPosition;
 varying vec2 surfacePosition;
 
-uniform HALF vec2 resolution;
+uniform half2 resolution;
 
 void main(void) {
     surfacePosition =
