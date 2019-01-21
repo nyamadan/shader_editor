@@ -13,3 +13,6 @@
 [submodule "stb"]
 	path = stb
 	url = git@github.com:nothings/stb.git
+[submodule "ImGuiColorTextEdit"]
+	path = ImGuiColorTextEdit
+	url = git@github.com:BalazsJako/ImGuiColorTextEdit.git

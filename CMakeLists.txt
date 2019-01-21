@@ -18,6 +18,7 @@ set(IMGUI_SOURCES
     imgui/imgui_widgets.cpp
     imgui/examples/imgui_impl_glfw.cpp
     imgui/examples/imgui_impl_opengl3.cpp
+	ImGuiColorTextEdit/TextEditor.cpp
 )
 
 #GLM
@@ -26,12 +27,15 @@ include_directories(./glm)
 
 # Imgui
 include_directories(./imgui)
+include_directories(./ImGuiColorTextEdit)
 
 # stb
 include_directories(./stb)
 add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
 
 if(EMSCRIPTEN)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     set(CMAKE_EXE_LINKER_FLAGS "--embed-file ${PROJECT_SOURCE_DIR}/default@default --no-heap-copy -s USE_WEBGL2=1 -s USE_GLFW=3 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
 

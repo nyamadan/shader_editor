@@ -22,6 +22,7 @@
 #include <imgui.h>
 #include <examples/imgui_impl_glfw.h>
 #include <examples/imgui_impl_opengl3.h>
+#include <TextEditor.h>
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -83,6 +84,8 @@ uint8_t *yuvBuffer = nullptr;
 time_t currentFrame = 0;
 time_t frameEnd = 0;
 FILE *fVideo;
+
+TextEditor editor;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
@@ -190,11 +193,89 @@ void updateFrameBuffers(GLuint width, GLuint height) {
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
+void ShowTextEditor() {
+    auto cpos = editor.GetCursorPosition();
+    ImGui::Begin(
+        "Text Editor Demo", nullptr,
+        ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
+    ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Save")) {
+                auto textToSave = editor.GetText();
+                /// save text....
+            }
+            if (ImGui::MenuItem("Quit", "Alt-F4")) {
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit")) {
+            bool ro = editor.IsReadOnly();
+            if (ImGui::MenuItem("Read-only mode", nullptr, &ro))
+                editor.SetReadOnly(ro);
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Undo", "ALT-Backspace", nullptr,
+                                !ro && editor.CanUndo()))
+                editor.Undo();
+            if (ImGui::MenuItem("Redo", "Ctrl-Y", nullptr,
+                                !ro && editor.CanRedo()))
+                editor.Redo();
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Copy", "Ctrl-C", nullptr,
+                                editor.HasSelection()))
+                editor.Copy();
+            if (ImGui::MenuItem("Cut", "Ctrl-X", nullptr,
+                                !ro && editor.HasSelection()))
+                editor.Cut();
+            if (ImGui::MenuItem("Delete", "Del", nullptr,
+                                !ro && editor.HasSelection()))
+                editor.Delete();
+            if (ImGui::MenuItem("Paste", "Ctrl-V", nullptr,
+                                !ro && ImGui::GetClipboardText() != nullptr))
+                editor.Paste();
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Select all", nullptr, nullptr))
+                editor.SetSelection(
+                    TextEditor::Coordinates(),
+                    TextEditor::Coordinates(editor.GetTotalLines(), 0));
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Dark palette"))
+                editor.SetPalette(TextEditor::GetDarkPalette());
+            if (ImGui::MenuItem("Light palette"))
+                editor.SetPalette(TextEditor::GetLightPalette());
+            if (ImGui::MenuItem("Retro blue palette"))
+                editor.SetPalette(TextEditor::GetRetroBluePalette());
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+
+    ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s", cpos.mLine + 1,
+                cpos.mColumn + 1, editor.GetTotalLines(),
+                editor.IsOverwrite() ? "Ovr" : "Ins",
+                editor.CanUndo() ? "*" : " ",
+                editor.GetLanguageDefinition().mName.c_str(), "TextEditor");
+
+    editor.Render("TextEditor");
+    ImGui::End();
+
+}  // namespace
+
 void update(void *) {
     // ImGUI
     static bool showImGuiDemoWindow = false;
     static bool showDebugWindow = true;
     static bool showAppLogWindow = false;
+    static bool showTextEditor = false;
 
     static int uiBufferQuality = 1;
     static bool uiPlaying = true;
@@ -276,7 +357,7 @@ void update(void *) {
             timeStart = now - uiTimeValue;
             uTimeValue = uiTimeValue;
         } else {
-            uTimeValue = now;
+            uTimeValue = now - timeStart;
         }
     }
 
@@ -380,7 +461,8 @@ void update(void *) {
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
             if (ImGui::Button("Save")) {
-                frameEnd = static_cast<time_t>(30000.0f * uiVideoTime / 1001.0f);
+                frameEnd =
+                    static_cast<time_t>(30000.0f * uiVideoTime / 1001.0f);
                 currentFrame = 0;
                 uTimeValue = 0;
 
@@ -442,14 +524,14 @@ void update(void *) {
         }
 
         if (ImGui::CollapsingHeader("Window")) {
-            ImGui::Checkbox("Log",
-                            &showAppLogWindow);  // Edit bools storing our
-                                                 // windows open/close state
-
-            ImGui::Checkbox("ImGui Demo Window",
-                            &showImGuiDemoWindow);  // Edit bools storing our
-                                                    // windows open/close state
+            ImGui::Checkbox("Log", &showAppLogWindow);
+            ImGui::Checkbox("TextEditor", &showTextEditor);
+            ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
         }
+    }
+
+    if (showTextEditor) {
+        ShowTextEditor();
     }
 
     if (showAppLogWindow) {
@@ -691,6 +773,9 @@ int main(void) {
     lastMTimeFS = st.st_mtime;
 
     timeStart = static_cast<float>(ImGui::GetTime());
+
+    auto lang = TextEditor::LanguageDefinition::GLSL();
+    editor.SetLanguageDefinition(lang);
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);
