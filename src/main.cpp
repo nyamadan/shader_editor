@@ -15,6 +15,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 #include <stb_image_write.h>
 
@@ -64,6 +65,8 @@ GLint uCopyResolution = 0;
 GLint uCopyBackBuffer = 0;
 GLuint copyProgram = 0;
 
+int writeBufferIndex = 0;
+int readBufferIndex = 1;
 GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
@@ -75,7 +78,7 @@ float timeStart = 0;
 time_t lastMTimeVS = 0;
 time_t lastMTimeFS = 0;
 
-uint8_t *rgbBuffer = nullptr;
+uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 time_t currentFrame = 0;
 time_t frameEnd = 0;
@@ -176,14 +179,14 @@ void updateFrameBuffers(GLuint width, GLuint height) {
                                GL_TEXTURE_2D, backBuffers[i], 0);
     }
 
-    if (rgbBuffer != nullptr) {
-        delete[] rgbBuffer;
+    if (rgbaBuffer != nullptr) {
+        delete[] rgbaBuffer;
     }
     if (yuvBuffer != nullptr) {
         delete[] yuvBuffer;
     }
 
-    rgbBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
+    rgbaBuffer = new uint8_t[bufferWidth * bufferHeight * 4];
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
@@ -197,7 +200,7 @@ void update(void *) {
     static bool uiPlaying = true;
     static float uiTimeValue = 0;
     static int uiVideoResolution = 2;
-    static int uiVideoFrame = 90;
+    static float uiVideoTime = 5.0f;
 
     // Uniforms
     float uTimeValue;
@@ -264,8 +267,7 @@ void update(void *) {
     uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
     uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
     uMouseValue.x = static_cast<GLfloat>(xpos) / windowWidth;
-    uMouseValue.y =
-        1.0f - static_cast<GLfloat>(ypos) / windowHeight;
+    uMouseValue.y = 1.0f - static_cast<GLfloat>(ypos) / windowHeight;
 
     if (frameEnd > 0) {
         uTimeValue = currentFrame * 30.0f / 1001.0f;
@@ -370,19 +372,15 @@ void update(void *) {
                              IM_ARRAYSIZE(items))) {
             }
 
-            ImGui::DragInt("frame", &uiVideoFrame, 1.0f, 1, 65536, "%d");
+            ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
 
             std::stringstream ss;
-            ss.str(std::string());
-            ss << static_cast<float>(uiVideoFrame) * 1001.0f / 30000.0f << " s";
-            ImGui::LabelText("length", "%s", ss.str().c_str());
-
             ss.str(std::string());
             ss << 30000.0f / 1001.0f << " hz";
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
-            if (ImGui::Button("Run")) {
-                frameEnd = uiVideoFrame;
+            if (ImGui::Button("Save")) {
+                frameEnd = static_cast<time_t>(30000.0f * uiVideoTime / 1001.0f);
                 currentFrame = 0;
                 uTimeValue = 0;
 
@@ -420,10 +418,10 @@ void update(void *) {
                     "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C444 XYSCSS=444\n",
                     bufferWidth, bufferHeight);
 
-                ImGui::OpenPopup("Export");
+                ImGui::OpenPopup("Export Progress");
             }
 
-            if (ImGui::BeginPopupModal("Export", NULL,
+            if (ImGui::BeginPopupModal("Export Progress", NULL,
                                        ImGuiWindowFlags_AlwaysAutoResize)) {
                 if (frameEnd == 0) {
                     ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
@@ -464,7 +462,7 @@ void update(void *) {
 
     ImGui::Render();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[0]);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[writeBufferIndex]);
     glViewport(0, 0, bufferWidth, bufferHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -486,17 +484,17 @@ void update(void *) {
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 
     if (frameEnd != 0) {
-        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGB, GL_UNSIGNED_BYTE,
-                     rgbBuffer);
+        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
+                     rgbaBuffer);
 
         for (int x = 0; x < bufferWidth; x++) {
             for (int y = 0; y < bufferHeight; y++) {
                 const int i = y * bufferWidth + x;
-                const int j = i * 3;
+                const int j = i * 4;
                 const int size = bufferWidth * bufferHeight;
-                const uint8_t R = rgbBuffer[j + 0];
-                const uint8_t G = rgbBuffer[j + 1];
-                const uint8_t B = rgbBuffer[j + 2];
+                const uint8_t R = rgbaBuffer[j + 0];
+                const uint8_t G = rgbaBuffer[j + 1];
+                const uint8_t B = rgbaBuffer[j + 2];
                 const uint8_t Y =
                     static_cast<uint8_t>(0.299 * R + 0.587 * G + 0.114 * B);
                 const uint8_t U = static_cast<uint8_t>(-0.169 * R - 0.331 * G +
@@ -536,7 +534,7 @@ void update(void *) {
 
     if (uCopyBackBuffer >= 0) {
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backBuffers[0]);
+        glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
         glUniform1i(uCopyBackBuffer, 0);
     }
 
@@ -547,6 +545,8 @@ void update(void *) {
     glfwMakeContextCurrent(mainWindow);
 
     glfwSwapBuffers(mainWindow);
+
+    std::swap(writeBufferIndex, readBufferIndex);
 
     for (GLint error = glGetError(); error; error = glGetError()) {
         GetAppLog().AddLog("error code: %0X\n", error);
