@@ -193,7 +193,7 @@ void updateFrameBuffers(GLuint width, GLuint height) {
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
-void ShowTextEditor() {
+void ShowTextEditor(bool *showTextEditor) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
         "Text Editor Demo", nullptr,
@@ -205,7 +205,8 @@ void ShowTextEditor() {
                 auto textToSave = editor.GetText();
                 /// save text....
             }
-            if (ImGui::MenuItem("Quit", "Alt-F4")) {
+            if (ImGui::MenuItem("Close")) {
+                *showTextEditor = false;
             }
             ImGui::EndMenu();
         }
@@ -531,7 +532,7 @@ void update(void *) {
     }
 
     if (showTextEditor) {
-        ShowTextEditor();
+        ShowTextEditor(&showTextEditor);
     }
 
     if (showAppLogWindow) {
