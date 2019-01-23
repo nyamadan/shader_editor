@@ -5,6 +5,8 @@ set(APP_SOURCES
     src/main.cpp
     src/app_log.cpp
     src/shader_utils.cpp
+    src/shader_program.cpp
+    src/file_utils.cpp
 )
 
 set(GL3W_SOURCES

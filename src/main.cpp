@@ -1,17 +1,3 @@
-#include <stdio.h>
-
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#ifdef WIN32
-#include <io.h>
-#define open _open
-#define fdopen _fdopen
-#else
-#define O_BINARY 0x0000
-#endif
-
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -28,7 +14,9 @@
 #include <glm/ext.hpp>
 
 #include "common.hpp"
+#include "file_utils.hpp"
 #include "shader_utils.hpp"
+#include "shader_program.hpp"
 #include "app_log.hpp"
 
 namespace {
@@ -96,62 +84,48 @@ void glfwErrorCallback(int error, const char *description) {
     GetAppLog().AddLog("error %d: %s\n", error, description);
 }
 
-bool ReadText(char *&memblock, const char *const path) {
-    FILE *fp;
-    int fd;
-    struct stat st;
-    size_t size;
-
-    fd = open(path, O_RDONLY | O_BINARY);
-
-    fp = fdopen(fd, "rb");
-    fstat(fd, &st);
-    size = st.st_size;
-
-    memblock = new char[size + 1];
-    fread(memblock, sizeof(char), size, fp);
-    memblock[size] = '\0';
-    fclose(fp);
-
-    return true;
-}
-
 GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
+    std::string error;
+
     char *vsSource = nullptr;
-    ReadText(vsSource, vsPath);
+    readText(vsSource, vsPath);
 
     const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(handleVS, 1, &vsSource, NULL);
     glCompileShader(handleVS);
-    if (!checkCompiled(handleVS, vsPath)) {
-        delete vsSource;
+    if (!checkCompiled(handleVS, &error)) {
+        glDeleteShader(handleVS);
+        delete[] vsSource;
         return 0;
     }
-    delete vsSource;
+    delete[] vsSource;
 
     char *fsSource = nullptr;
-    ReadText(fsSource, fsPath);
+    readText(fsSource, fsPath);
 
     const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(handleFS, 1, &fsSource, NULL);
     glCompileShader(handleFS);
-    if (!checkCompiled(handleFS, fsPath)) {
-        delete fsSource;
+    if (!checkCompiled(handleFS, &error)) {
+        glDeleteShader(handleVS);
+        glDeleteShader(handleFS);
+        delete[] fsSource;
         return 0;
     }
-    delete fsSource;
+    delete[] fsSource;
 
     const GLuint program = glCreateProgram();
     glAttachShader(program, handleVS);
     glAttachShader(program, handleFS);
     glLinkProgram(program);
 
-    if (!checkLinked(program)) {
-        return 0;
-    }
-
     glDeleteShader(handleVS);
     glDeleteShader(handleFS);
+
+    if (!checkLinked(program, &error)) {
+        glDeleteProgram(program);
+        return 0;
+    }
 
     return program;
 }

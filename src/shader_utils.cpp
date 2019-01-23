@@ -10,42 +10,44 @@ const char *const GlslVersion = "#version 300 es\n";
 const char *const GlslVersion = "#version 330 core\n";
 #endif
 
-int checkLinked(unsigned int program) {
+int checkLinked(unsigned int program, std::string *error) {
     GLint success = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &success);
 
-    if (success == GL_FALSE) {
+    if (success == GL_FALSE && error != nullptr) {
         int max_len = 0;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &max_len);
 
-        char *err_log = static_cast<char *>(malloc(sizeof(char) * max_len));
+        char *err_log = new char[max_len];
         glGetProgramInfoLog(program, max_len, &max_len, err_log);
 
-        glDeleteProgram(program);
+        *error = "Program linking failed:\n";
+        *error += err_log;
+        *error += "\n";
 
-        std::cerr << "Program linking failed: " << err_log << std::endl;
-        free(err_log);
+        delete[] err_log;
     }
 
     return success;
 }
 
-int checkCompiled(unsigned int shader, const char *const path) {
+int checkCompiled(unsigned int shader, std::string *error) {
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 
-    if (success == GL_FALSE) {
+    if (success == GL_FALSE && error != nullptr) {
         int max_len = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
 
-        char *err_log = static_cast<char *>(malloc(sizeof(char) * max_len));
+        char *err_log = new char[max_len];
+
         glGetShaderInfoLog(shader, max_len, &max_len, err_log);
-        glDeleteShader(shader);
 
-        GetAppLog().AddLog("Shader compilation failed: %s\n%s\n",
-                           path == nullptr ? "" : path, err_log);
+        *error = "Shader compilation failed : \n";
+        *error += err_log;
+        *error += "\n";
 
-        free(err_log);
+        delete[] err_log;
     }
 
     return success;
