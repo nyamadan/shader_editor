@@ -14,6 +14,8 @@ void Shader::reset() {
     source = "";
     error = "";
     ok = false;
+
+    mTime = 0;
 }
 
 bool Shader::compile(const char *const path, GLuint type) {
@@ -23,7 +25,7 @@ bool Shader::compile(const char *const path, GLuint type) {
     this->type = type;
 
     char *source = nullptr;
-    readText(source, path);
+    readText(path, source, &mTime);
 
     this->source = std::string(source);
 
@@ -43,6 +45,12 @@ bool Shader::compile(const char *const path, GLuint type) {
     ok = true;
 
     return true;
+}
+
+bool Shader::checkExpired() const
+{
+    time_t mTime = getMTime(this->path.c_str());
+    return mTime != this->mTime;
 }
 
 void ShaderProgram::reset() {

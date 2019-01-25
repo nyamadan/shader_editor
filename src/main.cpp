@@ -88,7 +88,7 @@ GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     std::string error;
 
     char *vsSource = nullptr;
-    readText(vsSource, vsPath);
+    readText(vsPath, vsSource);
 
     const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(handleVS, 1, &vsSource, NULL);
@@ -101,7 +101,7 @@ GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
     delete[] vsSource;
 
     char *fsSource = nullptr;
-    readText(fsSource, fsPath);
+    readText(fsPath, fsSource);
 
     const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(handleFS, 1, &fsSource, NULL);

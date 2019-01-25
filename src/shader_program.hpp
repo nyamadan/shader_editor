@@ -10,6 +10,7 @@ class Shader {
     std::string source = "";
     std::string error = "";
     bool ok = false;
+    time_t mTime = 0;
 
    public:
     Shader() {}
@@ -19,9 +20,9 @@ class Shader {
     const std::string &getPath() const { return path; }
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
+    bool checkExpired() const;
 
     void reset();
-
     bool compile(const char *const path, GLuint type);
 };
 

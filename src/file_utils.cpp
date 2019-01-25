@@ -1,12 +1,16 @@
 #include "common.hpp"
 
-bool readText(char *&memblock, const char *const path) {
+bool readText(const char *const path, char *&memblock, time_t *mTime) {
     FILE *fp;
     int fd;
     struct stat st;
     size_t size;
 
     fd = open(path, O_RDONLY | O_BINARY);
+
+    if (mTime != nullptr) {
+        *mTime = static_cast<time_t>(st.st_mtime);
+    }
 
     fp = fdopen(fd, "rb");
     fstat(fd, &st);
@@ -18,4 +22,13 @@ bool readText(char *&memblock, const char *const path) {
     fclose(fp);
 
     return true;
+}
+
+time_t getMTime(const char *const path) {
+    int fd;
+    struct stat st;
+
+    fd = open(path, O_RDONLY | O_BINARY);
+
+    return static_cast<time_t>(st.st_mtime);
 }
