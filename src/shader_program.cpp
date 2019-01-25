@@ -53,9 +53,20 @@ bool Shader::checkExpired() const
     return mTime != this->mTime;
 }
 
+GLint ShaderProgram::uniform(const char *const name, UniformType type)
+{
+    GLint location = glGetUniformLocation(program, name);
+    ShaderUniform &u = uniforms[name];
+    u.name = name;
+    u.location = location;
+    u.type = type;
+    return location;
+}
+
 void ShaderProgram::reset() {
     vertexShader.reset();
     fragmentShader.reset();
+    uniforms.clear();
     program = 0;
     error = "";
     ok = false;

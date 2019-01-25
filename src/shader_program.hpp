@@ -2,6 +2,11 @@
 
 #include "common.hpp"
 
+#include <map>
+
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+
 class Shader {
    private:
     GLuint shader = 0;
@@ -26,17 +31,45 @@ class Shader {
     bool compile(const char *const path, GLuint type);
 };
 
+enum UniformType {
+    Float,
+    Vector1,
+    Vector2,
+    Vector3,
+    Vector4,
+    Sampler2D,
+};
+
+union ShaderUniformValue {
+    glm::vec1 vec1;
+    glm::vec2 vec2;
+    glm::vec3 vec3;
+    glm::vec4 vec4;
+    int sampler2d;
+};
+
+struct ShaderUniform {
+    UniformType type;
+    std::string name;
+    GLint location;
+
+    ShaderUniformValue value;
+};
+
 class ShaderProgram {
    private:
     Shader vertexShader;
     Shader fragmentShader;
     GLuint program = 0;
     std::string error = "";
+    std::map<std::string, ShaderUniform> uniforms;
     bool ok = false;
 
    public:
     ShaderProgram() {}
     ~ShaderProgram() { reset(); }
+
+    GLint uniform(const char *const name, UniformType type);
 
     GLuint getProgram() const { return program; }
     const std::string &getError() const { return error; }
