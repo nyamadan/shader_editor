@@ -52,7 +52,7 @@ GLuint program = 0;
 
 GLint uCopyResolution = 0;
 GLint uCopyBackBuffer = 0;
-GLuint copyProgram = 0;
+ShaderProgram copyProgram;
 
 int writeBufferIndex = 0;
 int readBufferIndex = 1;
@@ -582,7 +582,7 @@ void update(void *) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, windowWidth, windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(copyProgram);
+    glUseProgram(copyProgram.getProgram());
 
     if (uCopyResolution >= 0) {
         glm::vec2 uCopyResolutionValue(windowWidth, windowHeight);
@@ -705,10 +705,10 @@ int main(void) {
     uMouse = glGetUniformLocation(program, "mouse");
     uResolution = glGetUniformLocation(program, "resolution");
 
-    copyProgram = linkProgram(currentVS.c_str(), copyFS.c_str());
-    assert(copyProgram);
-    uCopyResolution = glGetUniformLocation(copyProgram, "resolution");
-    uCopyBackBuffer = glGetUniformLocation(copyProgram, "backbuffer");
+    copyProgram.compile(currentVS.c_str(), copyFS.c_str());
+    assert(copyProgram.getProgram());
+    uCopyResolution = glGetUniformLocation(copyProgram.getProgram(), "resolution");
+    uCopyBackBuffer = glGetUniformLocation(copyProgram.getProgram(), "backbuffer");
 
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);

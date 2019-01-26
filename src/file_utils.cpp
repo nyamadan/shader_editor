@@ -8,13 +8,14 @@ bool readText(const char *const path, char *&memblock, time_t *mTime) {
 
     fd = open(path, O_RDONLY | O_BINARY);
 
+    fstat(fd, &st);
+    size = st.st_size;
+
     if (mTime != nullptr) {
         *mTime = static_cast<time_t>(st.st_mtime);
     }
 
     fp = fdopen(fd, "rb");
-    fstat(fd, &st);
-    size = st.st_size;
 
     memblock = new char[size + 1];
     fread(memblock, sizeof(char), size, fp);
