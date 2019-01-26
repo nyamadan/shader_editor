@@ -72,6 +72,9 @@ class ShaderProgram {
     GLint uniform(const char *const name, UniformType type);
 
     GLuint getProgram() const { return program; }
+    bool checkExpired() const {
+        return vertexShader.checkExpired() || fragmentShader.checkExpired();
+    };
     const std::string &getError() const { return error; }
 
     void reset();
