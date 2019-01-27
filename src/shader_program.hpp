@@ -28,7 +28,9 @@ class Shader {
     bool checkExpiredWithReset();
 
     void reset();
-    bool compile(const char *const path, GLuint type);
+    bool compile(const std::string &path, GLuint type);
+    bool compileWithSource(const std::string &path, const std::string &source,
+                           GLuint type);
 };
 
 enum UniformType {
@@ -65,19 +67,26 @@ class ShaderProgram {
     std::map<std::string, ShaderUniform> uniforms;
     bool ok = false;
 
+    void link();
+
    public:
     ShaderProgram() {}
-    ~ShaderProgram() {
-        reset();
-    }
+    ~ShaderProgram() { reset(); }
 
     GLint uniform(const char *const name, UniformType type);
 
     GLuint getProgram() const { return program; }
+    const Shader &getVertexShader() { return vertexShader; }
+    const Shader &getFragmentShader() { return fragmentShader; }
+    bool isOK() const { return ok; }
     bool checkExpired() const;
     const std::string &getError() const { return error; }
 
     void reset();
     bool checkExpiredWithReset();
-    GLuint compile(const char *const vsPath, const char *const fsPath);
+    GLuint compile(const std::string &vsPath, const std::string &fsPath);
+    GLuint compileWithSource(const std::string& vsPath,
+                             const std::string& vsSource,
+                             const std::string& fsPath,
+                             const std::string& fsSource);
 };

@@ -28,9 +28,6 @@ const char *const DefaultFragmentShaderName = "frag.glsl";
 const char *const CopyFragmentShaderName = "copy.glsl";
 
 std::string assetPath;
-std::string currentVS;
-std::string currentFS;
-std::string copyFS;
 
 int windowWidth = 1024;
 int windowHeight = 768;
@@ -38,7 +35,7 @@ int windowHeight = 768;
 int bufferWidth;
 int bufferHeight;
 
-int positionLocation = 0;
+GLint positionLocation = 0;
 
 GLFWwindow *mainWindow = nullptr;
 
@@ -85,53 +82,7 @@ void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
-GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
-    std::string error;
-
-    char *vsSource = nullptr;
-    readText(vsPath, vsSource);
-
-    const GLuint handleVS = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(handleVS, 1, &vsSource, NULL);
-    glCompileShader(handleVS);
-    if (!checkCompiled(handleVS, &error)) {
-        glDeleteShader(handleVS);
-        delete[] vsSource;
-        return 0;
-    }
-    delete[] vsSource;
-
-    char *fsSource = nullptr;
-    readText(fsPath, fsSource);
-
-    const GLuint handleFS = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(handleFS, 1, &fsSource, NULL);
-    glCompileShader(handleFS);
-    if (!checkCompiled(handleFS, &error)) {
-        glDeleteShader(handleVS);
-        glDeleteShader(handleFS);
-        delete[] fsSource;
-        return 0;
-    }
-    delete[] fsSource;
-
-    const GLuint program = glCreateProgram();
-    glAttachShader(program, handleVS);
-    glAttachShader(program, handleFS);
-    glLinkProgram(program);
-
-    glDeleteShader(handleVS);
-    glDeleteShader(handleFS);
-
-    if (!checkLinked(program, &error)) {
-        glDeleteProgram(program);
-        return 0;
-    }
-
-    return program;
-}
-
-void updateFrameBuffers(GLuint width, GLuint height) {
+void updateFrameBuffers(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
@@ -168,21 +119,25 @@ void updateFrameBuffers(GLuint width, GLuint height) {
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
-void ShowTextEditor(bool& showTextEditor) {
+void ShowTextEditor(bool &showTextEditor) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
-        "Text Editor Demo", nullptr,
+        "Text Editor", nullptr,
         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Save")) {
-                auto textToSave = editor.GetText();
-                /// save text....
+                const std::string &textToSave = editor.GetText();
+                const char *const buffer = textToSave.c_str();
+                const size_t size = textToSave.size();
+                writeText(program->getFragmentShader().getPath(), buffer, size);
             }
+
             if (ImGui::MenuItem("Close")) {
                 showTextEditor = false;
             }
+
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
@@ -271,33 +226,44 @@ void update(void *) {
 
     float now = static_cast<float>(ImGui::GetTime());
 
+    std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
             std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
-            newProgram->compile(currentVS.c_str(), currentFS.c_str());
-
-            if (newProgram->getProgram()) {
-                positionLocation =
-                    glGetAttribLocation(newProgram->getProgram(), "aPosition");
-                uTime = glGetUniformLocation(newProgram->getProgram(), "time");
-                uMouse =
-                    glGetUniformLocation(newProgram->getProgram(), "mouse");
-                uResolution = glGetUniformLocation(newProgram->getProgram(),
-                                                   "resolution");
-                glUseProgram(newProgram->getProgram());
-                glDeleteProgram(program->getProgram());
-
-                program.swap(newProgram);
-
-                glBindVertexArray(vertexArraysObject);
-                glBindBuffer(GL_ARRAY_BUFFER, vPosition);
-                glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE,
-                                      0, 0);
-                glBindVertexArray(0);
-            }
+            newProgram->compileWithSource(
+                program->getVertexShader().getPath(),
+                program->getVertexShader().getSource(),
+                program->getFragmentShader().getPath(),
+                program->getFragmentShader().getSource());
         }
 
         lastCheckUpdate = now;
+    }
+
+    // OnUpdateText
+    if (showTextEditor && editor.IsTextChanged()) {
+        newProgram->compileWithSource(program->getVertexShader().getPath(),
+                                      program->getVertexShader().getSource(),
+                                      program->getFragmentShader().getPath(),
+                                      editor.GetText());
+    }
+
+    if (newProgram->isOK()) {
+        positionLocation =
+            glGetAttribLocation(newProgram->getProgram(), "aPosition");
+        uTime = glGetUniformLocation(newProgram->getProgram(), "time");
+        uMouse = glGetUniformLocation(newProgram->getProgram(), "mouse");
+        uResolution =
+            glGetUniformLocation(newProgram->getProgram(), "resolution");
+        glUseProgram(newProgram->getProgram());
+        glDeleteProgram(program->getProgram());
+
+        program.swap(newProgram);
+
+        glBindVertexArray(vertexArraysObject);
+        glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glBindVertexArray(0);
     }
 
     glfwMakeContextCurrent(mainWindow);
@@ -308,8 +274,8 @@ void update(void *) {
     if (frameEnd == 0) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
             updateFrameBuffers(
-                static_cast<GLuint>(currentWidth * bufferScale),
-                static_cast<GLuint>(currentHeight * bufferScale));
+                static_cast<GLint>(currentWidth * bufferScale),
+                static_cast<GLint>(currentHeight * bufferScale));
         }
     }
 
@@ -395,8 +361,8 @@ void update(void *) {
                 bufferScale =
                     1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
                 updateFrameBuffers(
-                    static_cast<GLuint>(currentWidth * bufferScale),
-                    static_cast<GLuint>(currentHeight * bufferScale));
+                    static_cast<GLint>(currentWidth * bufferScale),
+                    static_cast<GLint>(currentHeight * bufferScale));
 
                 // uniform values
                 uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
@@ -602,7 +568,7 @@ void update(void *) {
 
     std::swap(writeBufferIndex, readBufferIndex);
 
-    for (GLint error = glGetError(); error; error = glGetError()) {
+    for (GLenum error = glGetError(); error; error = glGetError()) {
         AppLog::getInstance().addLog("error code: %0X\n", error);
     }
 
@@ -611,7 +577,7 @@ void update(void *) {
 }  // namespace
 
 int main(void) {
-    currentVS = DefaultAssetPath;
+    std::string currentVS = DefaultAssetPath;
 #ifdef WIN32
     if (currentVS.back() != '\\' && currentVS.back() != '/') {
         currentVS.append("\\");
@@ -623,7 +589,7 @@ int main(void) {
 #endif
     currentVS.append(DefaultVertexShaderName);
 
-    currentFS = DefaultAssetPath;
+    std::string currentFS = DefaultAssetPath;
 #ifdef WIN32
     if (currentFS.back() != '\\' && currentFS.back() != '/') {
         currentFS.append("\\");
@@ -635,7 +601,7 @@ int main(void) {
 #endif
     currentFS.append(DefaultFragmentShaderName);
 
-    copyFS = DefaultAssetPath;
+    std::string copyFS = DefaultAssetPath;
 #ifdef WIN32
     if (copyFS.back() != '\\' && copyFS.back() != '/') {
         copyFS.append("\\");
@@ -694,7 +660,7 @@ int main(void) {
 
     // Compile shaders.
     program.reset(new ShaderProgram());
-    program->compile(currentVS.c_str(), currentFS.c_str());
+    program->compile(currentVS, currentFS);
     assert(program->getProgram());
 
     // getProgramLocation
@@ -703,7 +669,7 @@ int main(void) {
     uMouse = glGetUniformLocation(program->getProgram(), "mouse");
     uResolution = glGetUniformLocation(program->getProgram(), "resolution");
 
-    copyProgram.compile(currentVS.c_str(), copyFS.c_str());
+    copyProgram.compile(currentVS, copyFS);
     assert(copyProgram.getProgram());
     uCopyResolution =
         glGetUniformLocation(copyProgram.getProgram(), "resolution");
@@ -740,17 +706,11 @@ int main(void) {
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // check update.
-    struct stat st;
-    stat(currentVS.c_str(), &st);
-    lastMTimeVS = st.st_mtime;
-    stat(currentFS.c_str(), &st);
-    lastMTimeFS = st.st_mtime;
-
     timeStart = static_cast<float>(ImGui::GetTime());
 
     auto lang = TextEditor::LanguageDefinition::GLSL();
     editor.SetLanguageDefinition(lang);
+    editor.SetText(program->getFragmentShader().getSource());
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);
