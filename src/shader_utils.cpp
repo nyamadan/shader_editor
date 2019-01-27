@@ -27,9 +27,7 @@ int checkLinked(unsigned int program, std::string &error) {
         char *err_log = new char[max_len];
         glGetProgramInfoLog(program, max_len, &max_len, err_log);
 
-        error = "Program linking failed:\n";
-        error += err_log;
-        error += "\n";
+        error = err_log;
 
         delete[] err_log;
     }
@@ -55,9 +53,7 @@ int checkCompiled(unsigned int shader, std::string &error) {
 
         glGetShaderInfoLog(shader, max_len, &max_len, err_log);
 
-        error = "Shader compilation failed : \n";
-        error += err_log;
-        error += "\n";
+        error = err_log;
 
         delete[] err_log;
     }

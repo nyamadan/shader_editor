@@ -95,13 +95,14 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
     reset();
 
     if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER)) {
-        AppLog::getInstance().addLog("(%s) %s", vertexShader.getPath().c_str(),
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
+                                     vertexShader.getPath().c_str(),
                                      vertexShader.getError().c_str());
         return 0;
     }
 
     if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER)) {
-        AppLog::getInstance().addLog("(%s) %s",
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
                                      fragmentShader.getPath().c_str(),
                                      fragmentShader.getError().c_str());
         return 0;
@@ -119,21 +120,22 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
     return program;
 }
 
-GLuint ShaderProgram::compileWithSource(const std::string& vsPath,
-                                        const std::string& vsSource,
-                                        const std::string& fsPath,
-                                        const std::string& fsSource) {
+GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
+                                        const std::string &vsSource,
+                                        const std::string &fsPath,
+                                        const std::string &fsSource) {
     reset();
 
     if (!vertexShader.compileWithSource(vsPath, vsSource, GL_VERTEX_SHADER)) {
-        AppLog::getInstance().addLog("(%s) %s", vertexShader.getPath().c_str(),
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
+                                     vertexShader.getPath().c_str(),
                                      vertexShader.getError().c_str());
         return 0;
     }
 
     if (!fragmentShader.compileWithSource(fsPath, fsSource,
                                           GL_FRAGMENT_SHADER)) {
-        AppLog::getInstance().addLog("(%s) %s",
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
                                      fragmentShader.getPath().c_str(),
                                      fragmentShader.getError().c_str());
         return 0;
@@ -142,7 +144,8 @@ GLuint ShaderProgram::compileWithSource(const std::string& vsPath,
     link();
 
     if (!checkLinked(program, error)) {
-        AppLog::getInstance().addLog("%s", error.c_str());
+        AppLog::getInstance().addLog("Program linking failed:\n%s",
+                                     error.c_str());
         return 0;
     }
 

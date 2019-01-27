@@ -1,6 +1,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <regex>
 #include <algorithm>
 #include <memory>
 
@@ -229,12 +230,8 @@ void update(void *) {
     std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
-            std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
-            newProgram->compileWithSource(
-                program->getVertexShader().getPath(),
-                program->getVertexShader().getSource(),
-                program->getFragmentShader().getPath(),
-                program->getFragmentShader().getSource());
+            newProgram->compile(program->getVertexShader().getPath(),
+                                program->getFragmentShader().getPath());
         }
 
         lastCheckUpdate = now;
@@ -246,6 +243,33 @@ void update(void *) {
                                       program->getVertexShader().getSource(),
                                       program->getFragmentShader().getPath(),
                                       editor.GetText());
+        TextEditor::ErrorMarkers markers;
+        if (!newProgram->isOK()) {
+            const Shader &fs = newProgram->getFragmentShader();
+
+            if (!fs.isOK()) {
+                const std::string &error = fs.getError();
+#ifdef __EMSCRIPTEN__
+                const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
+#else
+                const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
+#endif
+                std::istringstream ss(error);
+                std::string line;
+                while (std::getline(ss, line)) {
+                    std::smatch m;
+                    std::regex_match(line, m, re);
+                    if (m.size() == 3) {
+                        int lineNumber = std::atoi(m[1].str().c_str());
+                        const std::string message = m[2].str();
+
+                        auto pair = std::make_pair(lineNumber, message);
+                        markers.insert(pair);
+                    }
+                }
+            }
+        }
+        editor.SetErrorMarkers(markers);
     }
 
     if (newProgram->isOK()) {
@@ -273,9 +297,8 @@ void update(void *) {
     // onResizeWindow
     if (frameEnd == 0) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
-            updateFrameBuffers(
-                static_cast<GLint>(currentWidth * bufferScale),
-                static_cast<GLint>(currentHeight * bufferScale));
+            updateFrameBuffers(static_cast<GLint>(currentWidth * bufferScale),
+                               static_cast<GLint>(currentHeight * bufferScale));
         }
     }
 
@@ -573,33 +596,33 @@ void update(void *) {
     }
 
     glfwPollEvents();
-}
+}  // namespace
 }  // namespace
 
 int main(void) {
-    std::string currentVS = DefaultAssetPath;
+    std::string vertexShaderPath = DefaultAssetPath;
 #ifdef WIN32
-    if (currentVS.back() != '\\' && currentVS.back() != '/') {
-        currentVS.append("\\");
+    if (vertexShaderPath.back() != '\\' && vertexShaderPath.back() != '/') {
+        vertexShaderPath.append("\\");
     }
 #else
-    if (currentVS.back() != '/') {
-        currentVS.append("/");
+    if (vertexShaderPath.back() != '/') {
+        vertexShaderPath.append("/");
     }
 #endif
-    currentVS.append(DefaultVertexShaderName);
+    vertexShaderPath.append(DefaultVertexShaderName);
 
-    std::string currentFS = DefaultAssetPath;
+    std::string fragmentShaderPath = DefaultAssetPath;
 #ifdef WIN32
-    if (currentFS.back() != '\\' && currentFS.back() != '/') {
-        currentFS.append("\\");
+    if (fragmentShaderPath.back() != '\\' && fragmentShaderPath.back() != '/') {
+        fragmentShaderPath.append("\\");
     }
 #else
-    if (currentFS.back() != '/') {
-        currentFS.append("/");
+    if (fragmentShaderPath.back() != '/') {
+        fragmentShaderPath.append("/");
     }
 #endif
-    currentFS.append(DefaultFragmentShaderName);
+    fragmentShaderPath.append(DefaultFragmentShaderName);
 
     std::string copyFS = DefaultAssetPath;
 #ifdef WIN32
@@ -660,7 +683,7 @@ int main(void) {
 
     // Compile shaders.
     program.reset(new ShaderProgram());
-    program->compile(currentVS, currentFS);
+    program->compile(vertexShaderPath, fragmentShaderPath);
     assert(program->getProgram());
 
     // getProgramLocation
@@ -669,7 +692,7 @@ int main(void) {
     uMouse = glGetUniformLocation(program->getProgram(), "mouse");
     uResolution = glGetUniformLocation(program->getProgram(), "resolution");
 
-    copyProgram.compile(currentVS, copyFS);
+    copyProgram.compile(vertexShaderPath, copyFS);
     assert(copyProgram.getProgram());
     uCopyResolution =
         glGetUniformLocation(copyProgram.getProgram(), "resolution");

@@ -22,6 +22,7 @@ class Shader {
     const std::string &getSource() const { return source; }
     const std::string &getError() const { return error; }
     const std::string &getPath() const { return path; }
+    bool isOK() const { return ok; }
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
     bool checkExpired() const;
