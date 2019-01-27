@@ -10,7 +10,7 @@ void Shader::reset() {
     }
     type = 0;
     shader = 0;
-    path = "";
+    path = "(empty)";
     source = "";
     error = "";
     ok = false;
@@ -53,6 +53,14 @@ bool Shader::checkExpired() const
     return mTime != this->mTime;
 }
 
+bool Shader::checkExpiredWithReset()
+{
+    time_t mTime = getMTime(this->path.c_str());
+    bool expired = mTime != this->mTime;
+    this->mTime = mTime;
+    return expired;
+}
+
 GLint ShaderProgram::uniform(const char *const name, UniformType type)
 {
     GLint location = glGetUniformLocation(program, name);
@@ -72,18 +80,30 @@ void ShaderProgram::reset() {
     ok = false;
 }
 
+bool ShaderProgram::checkExpired() const
+{
+    return vertexShader.checkExpired() || fragmentShader.checkExpired();
+}
+
+bool ShaderProgram::checkExpiredWithReset()
+{
+    bool expiredVS = vertexShader.checkExpiredWithReset();
+    bool expiredFS = fragmentShader.checkExpiredWithReset();
+    return expiredVS || expiredFS;
+}
+
 GLuint ShaderProgram::compile(const char *const vsPath,
                               const char *const fsPath) {
     reset();
 
     if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER)) {
-        GetAppLog().AddLog("(%s) %s", vertexShader.getPath().c_str(),
+        AppLog::getInstance().addLog("(%s) %s", vertexShader.getPath().c_str(),
                            vertexShader.getError().c_str());
         return 0;
     }
 
     if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER)) {
-        GetAppLog().AddLog("(%s) %s", fragmentShader.getPath().c_str(),
+        AppLog::getInstance().addLog("(%s) %s", fragmentShader.getPath().c_str(),
                            fragmentShader.getError().c_str());
         return 0;
     }
@@ -94,7 +114,7 @@ GLuint ShaderProgram::compile(const char *const vsPath,
     glLinkProgram(program);
 
     if (!checkLinked(program, &error)) {
-        GetAppLog().AddLog("%s", error.c_str());
+        AppLog::getInstance().addLog("%s", error.c_str());
         return 0;
     }
 

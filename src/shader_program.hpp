@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common.hpp"
-
 #include <map>
 
 #include <glm/glm.hpp>
@@ -11,7 +10,7 @@ class Shader {
    private:
     GLuint shader = 0;
     GLuint type = 0;
-    std::string path = "";
+    std::string path = "(empty)";
     std::string source = "";
     std::string error = "";
     bool ok = false;
@@ -26,6 +25,7 @@ class Shader {
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
     bool checkExpired() const;
+    bool checkExpiredWithReset();
 
     void reset();
     bool compile(const char *const path, GLuint type);
@@ -67,17 +67,17 @@ class ShaderProgram {
 
    public:
     ShaderProgram() {}
-    ~ShaderProgram() { reset(); }
+    ~ShaderProgram() {
+        reset();
+    }
 
     GLint uniform(const char *const name, UniformType type);
 
     GLuint getProgram() const { return program; }
-    bool checkExpired() const {
-        return vertexShader.checkExpired() || fragmentShader.checkExpired();
-    };
+    bool checkExpired() const;
     const std::string &getError() const { return error; }
 
     void reset();
-
+    bool checkExpiredWithReset();
     GLuint compile(const char *const vsPath, const char *const fsPath);
 };

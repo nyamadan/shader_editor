@@ -4,22 +4,23 @@
 
 class AppLog {
    private:
-    ImGuiTextBuffer Buf;
-    ImGuiTextFilter Filter;
+    ImGuiTextBuffer buf;
+    ImGuiTextFilter filter;
     ImVector<int>
-        LineOffsets;  // Index to lines offset. We maintain this with AddLog()
+        lineOffsets;  // Index to lines offset. We maintain this with AddLog()
                       // calls, allowing us to have a random access on lines
-    bool ScrollToBottom;
+    bool scrolltoBottom;
 
    public:
-    AppLog() { Clear(); }
+    static AppLog& getInstance();
 
-    void Clear();
+    AppLog() { clear(); }
 
-    void AddLog(const char* fmt, ...);
+    void clear();
 
-    void Draw(const char* title, bool* p_open = NULL);
+    void addLog(const char* fmt, ...);
+
+    void draw(const char* title, bool* p_open = NULL);
+
+    void showAppLogWindow(bool& open);
 };
-
-AppLog& GetAppLog();
-void ShowAppLogWindow(bool* pOpen);

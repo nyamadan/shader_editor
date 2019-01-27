@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <memory>
 
 #include <stb_image_write.h>
 
@@ -48,7 +49,7 @@ GLuint vertexArraysObject = 0;
 GLint uTime = 0;
 GLint uMouse = 0;
 GLint uResolution = 0;
-GLuint program = 0;
+std::shared_ptr<ShaderProgram> program;
 
 GLint uCopyResolution = 0;
 GLint uCopyBackBuffer = 0;
@@ -81,7 +82,7 @@ const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
 const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
 void glfwErrorCallback(int error, const char *description) {
-    GetAppLog().AddLog("error %d: %s\n", error, description);
+    AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
 GLuint linkProgram(const char *const vsPath, const char *const fsPath) {
@@ -167,7 +168,7 @@ void updateFrameBuffers(GLuint width, GLuint height) {
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
-void ShowTextEditor(bool *showTextEditor) {
+void ShowTextEditor(bool& showTextEditor) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
         "Text Editor Demo", nullptr,
@@ -180,7 +181,7 @@ void ShowTextEditor(bool *showTextEditor) {
                 /// save text....
             }
             if (ImGui::MenuItem("Close")) {
-                *showTextEditor = false;
+                showTextEditor = false;
             }
             ImGui::EndMenu();
         }
@@ -271,24 +272,22 @@ void update(void *) {
     float now = static_cast<float>(ImGui::GetTime());
 
     if (now - lastCheckUpdate > CheckInterval) {
-        struct stat stVS;
-        struct stat stFS;
+        if (program->checkExpiredWithReset()) {
+            std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
+            newProgram->compile(currentVS.c_str(), currentFS.c_str());
 
-        stat(currentVS.c_str(), &stVS);
-        stat(currentFS.c_str(), &stFS);
+            if (newProgram->getProgram()) {
+                positionLocation =
+                    glGetAttribLocation(newProgram->getProgram(), "aPosition");
+                uTime = glGetUniformLocation(newProgram->getProgram(), "time");
+                uMouse =
+                    glGetUniformLocation(newProgram->getProgram(), "mouse");
+                uResolution = glGetUniformLocation(newProgram->getProgram(),
+                                                   "resolution");
+                glUseProgram(newProgram->getProgram());
+                glDeleteProgram(program->getProgram());
 
-        if (stFS.st_mtime != lastMTimeFS || stVS.st_mtime != lastMTimeVS) {
-            GLuint newProgram =
-                linkProgram(currentVS.c_str(), currentFS.c_str());
-
-            positionLocation = glGetAttribLocation(program, "aPosition");
-            uTime = glGetUniformLocation(program, "time");
-            uMouse = glGetUniformLocation(program, "mouse");
-            uResolution = glGetUniformLocation(program, "resolution");
-            if (newProgram) {
-                glUseProgram(newProgram);
-                glDeleteProgram(program);
-                program = newProgram;
+                program.swap(newProgram);
 
                 glBindVertexArray(vertexArraysObject);
                 glBindBuffer(GL_ARRAY_BUFFER, vPosition);
@@ -296,8 +295,6 @@ void update(void *) {
                                       0, 0);
                 glBindVertexArray(0);
             }
-            lastMTimeVS = stVS.st_mtime;
-            lastMTimeFS = stFS.st_mtime;
         }
 
         lastCheckUpdate = now;
@@ -506,11 +503,11 @@ void update(void *) {
     }
 
     if (showTextEditor) {
-        ShowTextEditor(&showTextEditor);
+        ShowTextEditor(showTextEditor);
     }
 
     if (showAppLogWindow) {
-        ShowAppLogWindow(&showAppLogWindow);
+        AppLog::getInstance().showAppLogWindow(showAppLogWindow);
     }
 
     if (showImGuiDemoWindow) {
@@ -523,7 +520,7 @@ void update(void *) {
     glViewport(0, 0, bufferWidth, bufferHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(program);
+    glUseProgram(program->getProgram());
 
     if (uResolution >= 0) {
         glUniform2fv(uResolution, 1, glm::value_ptr(uResolutionValue));
@@ -606,7 +603,7 @@ void update(void *) {
     std::swap(writeBufferIndex, readBufferIndex);
 
     for (GLint error = glGetError(); error; error = glGetError()) {
-        GetAppLog().AddLog("error code: %0X\n", error);
+        AppLog::getInstance().addLog("error code: %0X\n", error);
     }
 
     glfwPollEvents();
@@ -696,19 +693,22 @@ int main(void) {
     glfwMakeContextCurrent(mainWindow);
 
     // Compile shaders.
-    program = linkProgram(currentVS.c_str(), currentFS.c_str());
-    assert(program);
+    program.reset(new ShaderProgram());
+    program->compile(currentVS.c_str(), currentFS.c_str());
+    assert(program->getProgram());
 
     // getProgramLocation
-    positionLocation = glGetAttribLocation(program, "aPosition");
-    uTime = glGetUniformLocation(program, "time");
-    uMouse = glGetUniformLocation(program, "mouse");
-    uResolution = glGetUniformLocation(program, "resolution");
+    positionLocation = glGetAttribLocation(program->getProgram(), "aPosition");
+    uTime = glGetUniformLocation(program->getProgram(), "time");
+    uMouse = glGetUniformLocation(program->getProgram(), "mouse");
+    uResolution = glGetUniformLocation(program->getProgram(), "resolution");
 
     copyProgram.compile(currentVS.c_str(), copyFS.c_str());
     assert(copyProgram.getProgram());
-    uCopyResolution = glGetUniformLocation(copyProgram.getProgram(), "resolution");
-    uCopyBackBuffer = glGetUniformLocation(copyProgram.getProgram(), "backbuffer");
+    uCopyResolution =
+        glGetUniformLocation(copyProgram.getProgram(), "resolution");
+    uCopyBackBuffer =
+        glGetUniformLocation(copyProgram.getProgram(), "backbuffer");
 
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);

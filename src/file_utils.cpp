@@ -31,5 +31,7 @@ time_t getMTime(const char *const path) {
 
     fd = open(path, O_RDONLY | O_BINARY);
 
+    fstat(fd, &st);
+
     return static_cast<time_t>(st.st_mtime);
 }

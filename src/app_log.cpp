@@ -6,51 +6,53 @@ namespace {
 AppLog appLog;
 }
 
-void AppLog::Clear() {
-    Buf.clear();
-    LineOffsets.clear();
-    LineOffsets.push_back(0);
+AppLog& AppLog::getInstance() { return appLog; }
+
+void AppLog::clear() {
+    buf.clear();
+    lineOffsets.clear();
+    lineOffsets.push_back(0);
 }
 
-void AppLog::AddLog(const char* fmt, ...) {
-    int old_size = Buf.size();
+void AppLog::addLog(const char* fmt, ...) {
+    int old_size = buf.size();
     va_list args;
     va_start(args, fmt);
-    Buf.appendfv(fmt, args);
+    buf.appendfv(fmt, args);
     va_end(args);
 
-    std::cout << Buf.c_str() + old_size;
+    std::cout << buf.c_str() + old_size;
 
-    for (int new_size = Buf.size(); old_size < new_size; old_size++)
-        if (Buf[old_size] == '\n') LineOffsets.push_back(old_size + 1);
-    ScrollToBottom = true;
+    for (int new_size = buf.size(); old_size < new_size; old_size++)
+        if (buf[old_size] == '\n') lineOffsets.push_back(old_size + 1);
+    scrolltoBottom = true;
 }
 
-void AppLog::Draw(const char* title, bool* p_open) {
+void AppLog::draw(const char* title, bool* p_open) {
     if (!ImGui::Begin(title, p_open)) {
         ImGui::End();
         return;
     }
-    if (ImGui::Button("Clear")) Clear();
+    if (ImGui::Button("Clear")) clear();
     ImGui::SameLine();
     bool copy = ImGui::Button("Copy");
     ImGui::SameLine();
-    Filter.Draw("Filter", -100.0f);
+    filter.Draw("Filter", -100.0f);
     ImGui::Separator();
     ImGui::BeginChild("scrolling", ImVec2(0, 0), false,
                       ImGuiWindowFlags_HorizontalScrollbar);
     if (copy) ImGui::LogToClipboard();
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    const char* buf = Buf.begin();
-    const char* buf_end = Buf.end();
-    if (Filter.IsActive()) {
-        for (int line_no = 0; line_no < LineOffsets.Size; line_no++) {
-            const char* line_start = buf + LineOffsets[line_no];
-            const char* line_end = (line_no + 1 < LineOffsets.Size)
-                                       ? (buf + LineOffsets[line_no + 1] - 1)
+    const char* buf = this->buf.begin();
+    const char* buf_end = this->buf.end();
+    if (filter.IsActive()) {
+        for (int line_no = 0; line_no < lineOffsets.Size; line_no++) {
+            const char* line_start = buf + lineOffsets[line_no];
+            const char* line_end = (line_no + 1 < lineOffsets.Size)
+                                       ? (buf + lineOffsets[line_no + 1] - 1)
                                        : buf_end;
-            if (Filter.PassFilter(line_start, line_end))
+            if (filter.PassFilter(line_start, line_end))
                 ImGui::TextUnformatted(line_start, line_end);
         }
     } else {
@@ -71,14 +73,14 @@ void AppLog::Draw(const char* title, bool* p_open) {
         // search result would make it possible (and would be recommended if
         // you want to search through tens of thousands of entries)
         ImGuiListClipper clipper;
-        clipper.Begin(LineOffsets.Size);
+        clipper.Begin(lineOffsets.Size);
         while (clipper.Step()) {
             for (int line_no = clipper.DisplayStart;
                  line_no < clipper.DisplayEnd; line_no++) {
-                const char* line_start = buf + LineOffsets[line_no];
+                const char* line_start = buf + lineOffsets[line_no];
                 const char* line_end =
-                    (line_no + 1 < LineOffsets.Size)
-                        ? (buf + LineOffsets[line_no + 1] - 1)
+                    (line_no + 1 < lineOffsets.Size)
+                        ? (buf + lineOffsets[line_no + 1] - 1)
                         : buf_end;
                 ImGui::TextUnformatted(line_start, line_end);
             }
@@ -87,16 +89,14 @@ void AppLog::Draw(const char* title, bool* p_open) {
     }
     ImGui::PopStyleVar();
 
-    if (ScrollToBottom) ImGui::SetScrollHereY(1.0f);
-    ScrollToBottom = false;
+    if (scrolltoBottom) ImGui::SetScrollHereY(1.0f);
+    scrolltoBottom = false;
     ImGui::EndChild();
     ImGui::End();
 }
 
-AppLog& GetAppLog() { return appLog; }
-
-void ShowAppLogWindow(bool* p_open) {
+void AppLog::showAppLogWindow(bool &open) {
     const char* const Title = "Log";
     ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
-    GetAppLog().Draw(Title, p_open);
+    this->draw(Title, &open);
 }
