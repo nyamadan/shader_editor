@@ -195,7 +195,8 @@ void ShowTextEditor(bool &showTextEditor) {
                 cpos.mColumn + 1, editor.GetTotalLines(),
                 editor.IsOverwrite() ? "Ovr" : "Ins",
                 editor.CanUndo() ? "*" : " ",
-                editor.GetLanguageDefinition().mName.c_str(), "TextEditor");
+                editor.GetLanguageDefinition().mName.c_str(),
+                program->getFragmentShader().getPath().c_str());
 
     editor.Render("TextEditor");
     ImGui::End();
@@ -230,8 +231,15 @@ void update(void *) {
     std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
-            newProgram->compile(program->getVertexShader().getPath(),
-                                program->getFragmentShader().getPath());
+            if (showTextEditor) {
+                char *buffer;
+                readText(program->getFragmentShader().getPath(), buffer);
+                editor.SetText(buffer);
+                delete[] buffer;
+            } else {
+                newProgram->compile(program->getVertexShader().getPath(),
+                                    program->getFragmentShader().getPath());
+            }
         }
 
         lastCheckUpdate = now;

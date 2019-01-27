@@ -24,6 +24,7 @@ bool Shader::compileWithSource(const std::string &path,
 
     this->type = type;
     this->path = path;
+    this->mTime = getMTime(path);
     this->source = std::string(source);
 
     shader = glCreateShader(type);
@@ -32,7 +33,6 @@ bool Shader::compileWithSource(const std::string &path,
     glCompileShader(shader);
 
     if (!checkCompiled(shader, error)) {
-        glDeleteShader(shader);
         shader = 0;
         return false;
     }
