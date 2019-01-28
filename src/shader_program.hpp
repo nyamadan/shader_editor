@@ -64,6 +64,7 @@ class ShaderProgram {
     Shader vertexShader;
     Shader fragmentShader;
     GLuint program = 0;
+    double compileTime = 0;
     std::string error = "";
     std::map<std::string, ShaderUniform> uniforms;
     bool ok = false;

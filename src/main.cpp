@@ -200,8 +200,37 @@ void ShowTextEditor(bool &showTextEditor) {
 
     editor.Render("TextEditor");
     ImGui::End();
+}
 
-}  // namespace
+void applyErrorMarker(std::shared_ptr<ShaderProgram> program) {
+    TextEditor::ErrorMarkers markers;
+    if (!program->isOK()) {
+        const Shader &fs = program->getFragmentShader();
+
+        if (!fs.isOK()) {
+            const std::string &error = fs.getError();
+#ifdef __EMSCRIPTEN__
+            const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
+#else
+            const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
+#endif
+            std::istringstream ss(error);
+            std::string line;
+            while (std::getline(ss, line)) {
+                std::smatch m;
+                std::regex_match(line, m, re);
+                if (m.size() == 3) {
+                    int lineNumber = std::atoi(m[1].str().c_str());
+                    const std::string message = m[2].str();
+
+                    auto pair = std::make_pair(lineNumber, message);
+                    markers.insert(pair);
+                }
+            }
+        }
+    }
+    editor.SetErrorMarkers(markers);
+}
 
 void update(void *) {
     // ImGUI
@@ -229,6 +258,7 @@ void update(void *) {
     float now = static_cast<float>(ImGui::GetTime());
 
     std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
+
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
             if (showTextEditor) {
@@ -239,45 +269,19 @@ void update(void *) {
             } else {
                 newProgram->compile(program->getVertexShader().getPath(),
                                     program->getFragmentShader().getPath());
+                applyErrorMarker(newProgram);
             }
         }
 
         lastCheckUpdate = now;
     }
 
-    // OnUpdateText
     if (showTextEditor && editor.IsTextChanged()) {
         newProgram->compileWithSource(program->getVertexShader().getPath(),
                                       program->getVertexShader().getSource(),
                                       program->getFragmentShader().getPath(),
                                       editor.GetText());
-        TextEditor::ErrorMarkers markers;
-        if (!newProgram->isOK()) {
-            const Shader &fs = newProgram->getFragmentShader();
-
-            if (!fs.isOK()) {
-                const std::string &error = fs.getError();
-#ifdef __EMSCRIPTEN__
-                const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
-#else
-                const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
-#endif
-                std::istringstream ss(error);
-                std::string line;
-                while (std::getline(ss, line)) {
-                    std::smatch m;
-                    std::regex_match(line, m, re);
-                    if (m.size() == 3) {
-                        int lineNumber = std::atoi(m[1].str().c_str());
-                        const std::string message = m[2].str();
-
-                        auto pair = std::make_pair(lineNumber, message);
-                        markers.insert(pair);
-                    }
-                }
-            }
-        }
-        editor.SetErrorMarkers(markers);
+        applyErrorMarker(newProgram);
     }
 
     if (newProgram->isOK()) {
@@ -604,7 +608,7 @@ void update(void *) {
     }
 
     glfwPollEvents();
-}  // namespace
+}
 }  // namespace
 
 int main(void) {

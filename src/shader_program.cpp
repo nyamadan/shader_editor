@@ -75,6 +75,7 @@ void ShaderProgram::reset() {
     vertexShader.reset();
     fragmentShader.reset();
     uniforms.clear();
+    compileTime = 0;
     program = 0;
     error = "";
     ok = false;
@@ -92,6 +93,8 @@ bool ShaderProgram::checkExpiredWithReset() {
 
 GLuint ShaderProgram::compile(const std::string &vsPath,
                               const std::string &fsPath) {
+    double t0 = ImGui::GetTime();
+
     reset();
 
     if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER)) {
@@ -111,11 +114,17 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
     link();
 
     if (!checkLinked(program, error)) {
-        AppLog::getInstance().addLog("%s", error.c_str());
+        AppLog::getInstance().addLog("Program linking failed:\n%s",
+                                     error.c_str());
         return 0;
     }
 
+    compileTime = ImGui::GetTime() - t0;
     ok = true;
+
+    AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
+                                 vertexShader.getPath().c_str(),
+                                 fragmentShader.getPath().c_str(), compileTime);
 
     return program;
 }
@@ -124,6 +133,8 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
                                         const std::string &vsSource,
                                         const std::string &fsPath,
                                         const std::string &fsSource) {
+    double t0 = ImGui::GetTime();
+
     reset();
 
     if (!vertexShader.compileWithSource(vsPath, vsSource, GL_VERTEX_SHADER)) {
@@ -149,7 +160,12 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
         return 0;
     }
 
+    compileTime = ImGui::GetTime() - t0;
     ok = true;
+
+    AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
+                                 vertexShader.getPath().c_str(),
+                                 fragmentShader.getPath().c_str(), compileTime);
 
     return program;
 }
