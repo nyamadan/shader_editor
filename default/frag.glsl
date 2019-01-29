@@ -1,3 +1,5 @@
+// original: https://github.com/mrdoob/glsl-sandbox
+
 #ifdef GL_ES
 precision mediump float;
 #endif
