@@ -1,5 +1,5 @@
 # Shader Editor
 
-GLSL Editor which compatible with glslsandbox.
+GLSL Editor designed to be compatible with glslsandbox.
 
 ![image](image.png)
