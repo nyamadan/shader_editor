@@ -36,6 +36,7 @@ class Shader {
 
 enum UniformType {
     Float,
+    Integer,
     Vector1,
     Vector2,
     Vector3,
@@ -44,11 +45,12 @@ enum UniformType {
 };
 
 union ShaderUniformValue {
+    int i;
+    float f;
     glm::vec1 vec1;
     glm::vec2 vec2;
     glm::vec3 vec3;
     glm::vec4 vec4;
-    int sampler2d;
 };
 
 struct ShaderUniform {
@@ -75,7 +77,10 @@ class ShaderProgram {
     ShaderProgram() {}
     ~ShaderProgram() { reset(); }
 
-    GLint uniform(const char *const name, UniformType type);
+    GLint uniform(const std::string &name, UniformType type);
+    void setUniformInteger(const std::string &name, int value);
+    void setUniformVector2(const std::string &name, const glm::vec2 value);
+    void applyUniforms();
 
     GLuint getProgram() const { return program; }
     const Shader &getVertexShader() { return vertexShader; }
@@ -87,8 +92,8 @@ class ShaderProgram {
     void reset();
     bool checkExpiredWithReset();
     GLuint compile(const std::string &vsPath, const std::string &fsPath);
-    GLuint compileWithSource(const std::string& vsPath,
-                             const std::string& vsSource,
-                             const std::string& fsPath,
-                             const std::string& fsSource);
+    GLuint compileWithSource(const std::string &vsPath,
+                             const std::string &vsSource,
+                             const std::string &fsPath,
+                             const std::string &fsSource);
 };

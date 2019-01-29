@@ -49,8 +49,6 @@ GLint uMouse = 0;
 GLint uResolution = 0;
 std::shared_ptr<ShaderProgram> program;
 
-GLint uCopyResolution = 0;
-GLint uCopyBackBuffer = 0;
 ShaderProgram copyProgram;
 
 int writeBufferIndex = 0;
@@ -582,16 +580,14 @@ void update(void *) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(copyProgram.getProgram());
 
-    if (uCopyResolution >= 0) {
-        glm::vec2 uCopyResolutionValue(windowWidth, windowHeight);
-        glUniform2fv(uCopyResolution, 1, glm::value_ptr(uCopyResolutionValue));
-    }
+    glm::vec2 uCopyResolutionValue(windowWidth, windowHeight);
+    copyProgram.setUniformVector2("resolution", uResolutionValue);
 
-    if (uCopyBackBuffer >= 0) {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
-        glUniform1i(uCopyBackBuffer, 0);
-    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
+    copyProgram.setUniformInteger("backbuffer", 0);
+
+    copyProgram.applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
@@ -706,10 +702,8 @@ int main(void) {
 
     copyProgram.compile(vertexShaderPath, copyFS);
     assert(copyProgram.getProgram());
-    uCopyResolution =
-        glGetUniformLocation(copyProgram.getProgram(), "resolution");
-    uCopyBackBuffer =
-        glGetUniformLocation(copyProgram.getProgram(), "backbuffer");
+    copyProgram.uniform("resolution", UniformType::Vector2);
+    copyProgram.uniform("backbuffer", UniformType::Sampler2D);
 
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);

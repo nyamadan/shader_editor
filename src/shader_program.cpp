@@ -62,13 +62,45 @@ bool Shader::checkExpiredWithReset() {
     return expired;
 }
 
-GLint ShaderProgram::uniform(const char *const name, UniformType type) {
-    GLint location = glGetUniformLocation(program, name);
+GLint ShaderProgram::uniform(const std::string &name, UniformType type) {
+    GLint location = glGetUniformLocation(program, name.c_str());
     ShaderUniform &u = uniforms[name];
     u.name = name;
     u.location = location;
     u.type = type;
     return location;
+}
+
+void ShaderProgram::setUniformInteger(const std::string &name, int value) {
+    ShaderUniform &u = uniforms[name];
+    u.value.i = value;
+}
+
+void ShaderProgram::setUniformVector2(const std::string &name,
+                                      const glm::vec2 value) {
+    ShaderUniform &u = uniforms[name];
+    u.value.vec2 = value;
+}
+
+void ShaderProgram::applyUniforms() {
+    for (auto iter = uniforms.begin(); iter != uniforms.end(); iter++) {
+        const std::string &name = iter->first;
+        const ShaderUniform &u = iter->second;
+
+        if (u.location < 0) {
+            continue;
+        }
+
+        switch (u.type) {
+            case UniformType::Integer:
+            case UniformType::Sampler2D:
+                glUniform1i(u.location, u.value.i);
+                break;
+            case UniformType::Vector2:
+                glUniform2fv(u.location, 1, glm::value_ptr(u.value.vec2));
+                break;
+        }
+    }
 }
 
 void ShaderProgram::reset() {
