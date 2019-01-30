@@ -77,7 +77,7 @@ void ShaderProgram::setUniformInteger(const std::string &name, int value) {
 }
 
 void ShaderProgram::setUniformVector2(const std::string &name,
-                                      const glm::vec2 value) {
+                                      const glm::vec2 &value) {
     ShaderUniform &u = uniforms[name];
     u.value.vec2 = value;
 }

@@ -79,7 +79,7 @@ class ShaderProgram {
 
     GLint uniform(const std::string &name, UniformType type);
     void setUniformInteger(const std::string &name, int value);
-    void setUniformVector2(const std::string &name, const glm::vec2 value);
+    void setUniformVector2(const std::string &name, const glm::vec2 &value);
     void applyUniforms();
 
     GLuint getProgram() const { return program; }

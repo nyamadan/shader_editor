@@ -580,8 +580,7 @@ void update(void *) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(copyProgram.getProgram());
 
-    glm::vec2 uCopyResolutionValue(windowWidth, windowHeight);
-    copyProgram.setUniformVector2("resolution", uResolutionValue);
+    copyProgram.setUniformVector2("resolution", glm::vec2(windowWidth, windowHeight));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
