@@ -36,19 +36,13 @@ int windowHeight = 768;
 int bufferWidth;
 int bufferHeight;
 
-GLint positionLocation = 0;
-
 GLFWwindow *mainWindow = nullptr;
 
 GLuint vIndex = 0;
 GLuint vPosition = 0;
 GLuint vertexArraysObject = 0;
 
-GLint uTime = 0;
-GLint uMouse = 0;
-GLint uResolution = 0;
 std::shared_ptr<ShaderProgram> program;
-
 ShaderProgram copyProgram;
 
 int writeBufferIndex = 0;
@@ -237,7 +231,7 @@ void update(void *) {
     static bool showAppLogWindow = false;
     static bool showTextEditor = false;
 
-    static int uiBufferQuality = 1;
+    static int uiBufferQuality = 2;
     static bool uiPlaying = true;
     static float uiTimeValue = 0;
     static int uiVideoResolution = 2;
@@ -283,21 +277,20 @@ void update(void *) {
     }
 
     if (newProgram->isOK()) {
-        positionLocation =
-            glGetAttribLocation(newProgram->getProgram(), "aPosition");
-        uTime = glGetUniformLocation(newProgram->getProgram(), "time");
-        uMouse = glGetUniformLocation(newProgram->getProgram(), "mouse");
-        uResolution =
-            glGetUniformLocation(newProgram->getProgram(), "resolution");
+        newProgram->attribute("aPosition", 3);
+        newProgram->uniform("time", UniformType::Float);
+        newProgram->uniform("mouse", UniformType::Vector2);
+        newProgram->uniform("resolution", UniformType::Vector2);
+
+        glBindVertexArray(vertexArraysObject);
+        glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+        newProgram->applyAttributes();
+        glBindVertexArray(0);
+
         glUseProgram(newProgram->getProgram());
         glDeleteProgram(program->getProgram());
 
         program.swap(newProgram);
-
-        glBindVertexArray(vertexArraysObject);
-        glBindBuffer(GL_ARRAY_BUFFER, vPosition);
-        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
-        glBindVertexArray(0);
     }
 
     glfwMakeContextCurrent(mainWindow);
@@ -521,17 +514,10 @@ void update(void *) {
 
     glUseProgram(program->getProgram());
 
-    if (uResolution >= 0) {
-        glUniform2fv(uResolution, 1, glm::value_ptr(uResolutionValue));
-    }
-
-    if (uMouse >= 0) {
-        glUniform2fv(uMouse, 1, glm::value_ptr(uMouseValue));
-    }
-
-    if (uTime >= 0) {
-        glUniform1f(uTime, uTimeValue);
-    }
+    program->setUniformValue("resolution", uResolutionValue);
+    program->setUniformValue("mouse", uMouseValue);
+    program->setUniformValue("time", uTimeValue);
+    program->applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
@@ -580,12 +566,12 @@ void update(void *) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(copyProgram.getProgram());
 
-    copyProgram.setUniformVector2("resolution", glm::vec2(windowWidth, windowHeight));
-
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
-    copyProgram.setUniformInteger("backbuffer", 0);
 
+    copyProgram.setUniformValue("backbuffer", 0);
+    copyProgram.setUniformValue("resolution",
+                                glm::vec2(windowWidth, windowHeight));
     copyProgram.applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
@@ -694,10 +680,10 @@ int main(void) {
     assert(program->getProgram());
 
     // getProgramLocation
-    positionLocation = glGetAttribLocation(program->getProgram(), "aPosition");
-    uTime = glGetUniformLocation(program->getProgram(), "time");
-    uMouse = glGetUniformLocation(program->getProgram(), "mouse");
-    uResolution = glGetUniformLocation(program->getProgram(), "resolution");
+    program->attribute("aPosition", 3);
+    program->uniform("time", UniformType::Float);
+    program->uniform("mouse", UniformType::Vector2);
+    program->uniform("resolution", UniformType::Vector2);
 
     copyProgram.compile(vertexShaderPath, copyFS);
     assert(copyProgram.getProgram());
@@ -713,8 +699,7 @@ int main(void) {
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 12, positions,
                  GL_STATIC_DRAW);
-    glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
+    program->applyAttributes();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * 6, indices,
                  GL_STATIC_DRAW);

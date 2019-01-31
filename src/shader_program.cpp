@@ -62,6 +62,33 @@ bool Shader::checkExpiredWithReset() {
     return expired;
 }
 
+void ShaderProgram::attribute(const std::string &name, GLint size, GLenum type,
+                              GLboolean normalized, GLsizei stride,
+                              const void *pointer) {
+    ShaderAttribute &attr = this->attributes[name];
+    attr.name = name;
+    attr.size = size;
+    attr.type = type;
+    attr.normalized = normalized;
+    attr.stride = stride;
+    attr.pointer = pointer;
+    attr.location = glGetAttribLocation(program, name.c_str());
+}
+
+void ShaderProgram::applyAttributes() {
+    for (auto iter = attributes.begin(); iter != attributes.end(); iter++) {
+        const std::string &name = iter->first;
+        const ShaderAttribute &attr = iter->second;
+
+        if (attr.location < 0) {
+            continue;
+        }
+
+        glVertexAttribPointer(attr.location, attr.size, attr.type,
+                              attr.normalized, attr.stride, attr.pointer);
+    }
+}
+
 GLint ShaderProgram::uniform(const std::string &name, UniformType type) {
     GLint location = glGetUniformLocation(program, name.c_str());
     ShaderUniform &u = uniforms[name];
@@ -76,10 +103,28 @@ void ShaderProgram::setUniformInteger(const std::string &name, int value) {
     u.value.i = value;
 }
 
+void ShaderProgram::setUniformFloat(const std::string &name, float value) {
+    ShaderUniform &u = uniforms[name];
+    u.value.f = value;
+}
+
 void ShaderProgram::setUniformVector2(const std::string &name,
                                       const glm::vec2 &value) {
     ShaderUniform &u = uniforms[name];
     u.value.vec2 = value;
+}
+
+void ShaderProgram::setUniformValue(const std::string &name,
+                                    const glm::vec2 &value) {
+    this->setUniformVector2(name, value);
+}
+
+void ShaderProgram::setUniformValue(const std::string &name, float value) {
+    this->setUniformFloat(name, value);
+}
+
+void ShaderProgram::setUniformValue(const std::string &name, int value) {
+    this->setUniformInteger(name, value);
 }
 
 void ShaderProgram::applyUniforms() {
@@ -92,6 +137,9 @@ void ShaderProgram::applyUniforms() {
         }
 
         switch (u.type) {
+            case UniformType::Float:
+                glUniform1f(u.location, u.value.f);
+                break;
             case UniformType::Integer:
             case UniformType::Sampler2D:
                 glUniform1i(u.location, u.value.i);
@@ -106,6 +154,7 @@ void ShaderProgram::applyUniforms() {
 void ShaderProgram::reset() {
     vertexShader.reset();
     fragmentShader.reset();
+    attributes.clear();
     uniforms.clear();
     compileTime = 0;
     program = 0;

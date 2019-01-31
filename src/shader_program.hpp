@@ -61,6 +61,16 @@ struct ShaderUniform {
     ShaderUniformValue value;
 };
 
+struct ShaderAttribute {
+    std::string name;
+    GLint size;
+    GLint location;
+    GLenum type;
+    GLboolean normalized;
+    GLsizei stride;
+    const void *pointer;
+};
+
 class ShaderProgram {
    private:
     Shader vertexShader;
@@ -68,7 +78,10 @@ class ShaderProgram {
     GLuint program = 0;
     double compileTime = 0;
     std::string error = "";
+
     std::map<std::string, ShaderUniform> uniforms;
+    std::map<std::string, ShaderAttribute> attributes;
+
     bool ok = false;
 
     void link();
@@ -77,9 +90,19 @@ class ShaderProgram {
     ShaderProgram() {}
     ~ShaderProgram() { reset(); }
 
+    void attribute(const std::string &name, GLint size = 3,
+                   GLenum type = GL_FLOAT, GLboolean normalized = GL_FALSE,
+                   GLsizei stride = 0, const void *pointer = 0);
+    void applyAttributes();
+
     GLint uniform(const std::string &name, UniformType type);
     void setUniformInteger(const std::string &name, int value);
+    void setUniformFloat(const std::string &name, float value);
     void setUniformVector2(const std::string &name, const glm::vec2 &value);
+    void setUniformValue(const std::string &name, const glm::vec2 &value);
+    void setUniformValue(const std::string &name, float value);
+    void setUniformValue(const std::string &name, int value);
+
     void applyUniforms();
 
     GLuint getProgram() const { return program; }
