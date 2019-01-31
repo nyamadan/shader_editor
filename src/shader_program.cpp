@@ -174,7 +174,7 @@ bool ShaderProgram::checkExpiredWithReset() {
 
 GLuint ShaderProgram::compile(const std::string &vsPath,
                               const std::string &fsPath) {
-    double t0 = ImGui::GetTime();
+    double t0 = glfwGetTime();
 
     reset();
 
@@ -200,7 +200,7 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
         return 0;
     }
 
-    compileTime = ImGui::GetTime() - t0;
+    compileTime = glfwGetTime() - t0;
     ok = true;
 
     AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
@@ -214,7 +214,7 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
                                         const std::string &vsSource,
                                         const std::string &fsPath,
                                         const std::string &fsSource) {
-    double t0 = ImGui::GetTime();
+    double t0 = glfwGetTime();
 
     reset();
 
@@ -241,7 +241,7 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
         return 0;
     }
 
-    compileTime = ImGui::GetTime() - t0;
+    compileTime = glfwGetTime() - t0;
     ok = true;
 
     AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
