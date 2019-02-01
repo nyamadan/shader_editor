@@ -277,10 +277,8 @@ void update(void *) {
     }
 
     if (newProgram->isOK()) {
-        newProgram->attribute("aPosition", 3);
-        newProgram->uniform("time", UniformType::Float);
-        newProgram->uniform("mouse", UniformType::Vector2);
-        newProgram->uniform("resolution", UniformType::Vector2);
+        newProgram->copyAttributesFrom(*program);
+        newProgram->copyUniformsFrom(*program);
 
         glBindVertexArray(vertexArraysObject);
         glBindBuffer(GL_ARRAY_BUFFER, vPosition);
@@ -426,7 +424,7 @@ void update(void *) {
 
             if (ImGui::Button("Save")) {
                 frameEnd =
-                    static_cast<time_t>(30000.0f * uiVideoTime / 1001.0f);
+                    static_cast<time_t>(30000.0f / 1001.0f * uiVideoTime);
                 currentFrame = 0;
                 uTimeValue = 0;
 

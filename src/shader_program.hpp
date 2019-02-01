@@ -103,6 +103,8 @@ class ShaderProgram {
     void setUniformValue(const std::string &name, float value);
     void setUniformValue(const std::string &name, int value);
 
+    void copyUniformsFrom(const ShaderProgram &program);
+    void copyAttributesFrom(const ShaderProgram &program);
     void applyUniforms();
 
     GLuint getProgram() const { return program; }

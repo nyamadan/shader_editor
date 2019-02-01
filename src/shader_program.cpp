@@ -127,6 +127,37 @@ void ShaderProgram::setUniformValue(const std::string &name, int value) {
     this->setUniformInteger(name, value);
 }
 
+void ShaderProgram::copyAttributesFrom(const ShaderProgram &program) {
+    for (auto iter = program.attributes.begin(); iter != program.attributes.end(); iter++) {
+        const std::string &name = iter->first;
+        const ShaderAttribute &attr = iter->second;
+
+        this->attribute(name, attr.size, attr.type, attr.normalized, attr.stride, attr.pointer);
+    }
+}
+
+void ShaderProgram::copyUniformsFrom(const ShaderProgram &program) {
+    for (auto iter = program.uniforms.begin(); iter != program.uniforms.end(); iter++) {
+        const std::string &name = iter->first;
+        const ShaderUniform &u = iter->second;
+
+        this->uniform(name, u.type);
+
+        switch (u.type) {
+            case UniformType::Float:
+                this->setUniformValue(name, u.value.f);
+                break;
+            case UniformType::Integer:
+            case UniformType::Sampler2D:
+                this->setUniformValue(name, u.value.i);
+                break;
+            case UniformType::Vector2:
+                this->setUniformValue(name, u.value.vec2);
+                break;
+        }
+    }
+}
+
 void ShaderProgram::applyUniforms() {
     for (auto iter = uniforms.begin(); iter != uniforms.end(); iter++) {
         const std::string &name = iter->first;
