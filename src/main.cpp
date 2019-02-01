@@ -424,7 +424,7 @@ void update(void *) {
 
             if (ImGui::Button("Save")) {
                 frameEnd =
-                    static_cast<time_t>(30000.0f / 1001.0f * uiVideoTime);
+                    static_cast<time_t>(ceil(30000.0f / 1001.0f * uiVideoTime));
                 currentFrame = 0;
                 uTimeValue = 0;
 
