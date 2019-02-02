@@ -75,7 +75,7 @@ void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
-void updateFrameBuffersWidth(GLint width, GLint height) {
+void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
@@ -298,8 +298,9 @@ void update(void *) {
     // onResizeWindow
     if (frameEnd == 0) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
-            updateFrameBuffersWidth(static_cast<GLint>(currentWidth * bufferScale),
-                               static_cast<GLint>(currentHeight * bufferScale));
+            updateFrameBuffersSize(
+                static_cast<GLint>(currentWidth * bufferScale),
+                static_cast<GLint>(currentHeight * bufferScale));
         }
     }
 
@@ -323,6 +324,10 @@ void update(void *) {
         }
     }
 
+    program->setUniformValue("resolution", uResolutionValue);
+    program->setUniformValue("mouse", uMouseValue);
+    program->setUniformValue("time", uTimeValue);
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -341,28 +346,47 @@ void update(void *) {
         }
 
         if (ImGui::CollapsingHeader("Uniforms")) {
-            std::stringstream ss;
+            auto &uniforms = program->getUniforms();
+            for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
+                auto &u = it->second;
+                if (u.location < 0) {
+                    continue;
+                }
 
-            ss.str(std::string());
-            ss << uTimeValue;
-            ImGui::LabelText("time", "%s", ss.str().c_str());
+                if (u.name == "time" || u.name == "resolution" ||
+                    u.name == "mouse") {
+                    ImGui::LabelText(u.name.c_str(), "%s",
+                                     u.toString().c_str());
+                    continue;
+                }
 
-            ss.str(std::string());
-            ss << uResolutionValue.x << ", " << uResolutionValue.y;
-            ImGui::LabelText("resolution", "%s", ss.str().c_str());
-
-            ss.str(std::string());
-            ss << uMouseValue.x << ", " << uMouseValue.y;
-            ImGui::LabelText("mouse", "%s", ss.str().c_str());
-
-            ss.clear();
+                switch (u.type) {
+                    case UniformType::Float:
+                        ImGui::DragFloat(u.name.c_str(), &u.value.f);
+                        break;
+                    case UniformType::Integer:
+                        ImGui::DragInt(u.name.c_str(), &u.value.i);
+                        break;
+                    case UniformType::Vector2:
+                        ImGui::DragFloat2(u.name.c_str(),
+                                          glm::value_ptr(u.value.vec2));
+                        break;
+                    case UniformType::Vector3:
+                        ImGui::DragFloat3(u.name.c_str(),
+                                          glm::value_ptr(u.value.vec3));
+                        break;
+                    case UniformType::Vector4:
+                        ImGui::DragFloat4(u.name.c_str(),
+                                          glm::value_ptr(u.value.vec4));
+                        break;
+                }
+            }
         }
 
         if (ImGui::CollapsingHeader("Time")) {
             if (uiPlaying) {
-                std::stringstream ss;
-                ss << uTimeValue;
-                ImGui::LabelText("time", "%s", ss.str().c_str());
+                ImGui::LabelText("time", "%s",
+                                 std::to_string(uTimeValue).c_str());
             } else {
                 ImGui::DragFloat("time", &uiTimeValue, 0.5f);
             }
@@ -385,7 +409,7 @@ void update(void *) {
                 // update framebuffers
                 bufferScale =
                     1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
-                updateFrameBuffersWidth(
+                updateFrameBuffersSize(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
 
@@ -431,28 +455,28 @@ void update(void *) {
 
                 switch (uiVideoResolution) {
                     case 0:
-                        updateFrameBuffersWidth(256, 144);
+                        updateFrameBuffersSize(256, 144);
                         break;
                     case 1:
-                        updateFrameBuffersWidth(427, 240);
+                        updateFrameBuffersSize(427, 240);
                         break;
                     case 2:
-                        updateFrameBuffersWidth(640, 360);
+                        updateFrameBuffersSize(640, 360);
                         break;
                     case 3:
-                        updateFrameBuffersWidth(720, 480);
+                        updateFrameBuffersSize(720, 480);
                         break;
                     case 4:
-                        updateFrameBuffersWidth(1280, 720);
+                        updateFrameBuffersSize(1280, 720);
                         break;
                     case 5:
-                        updateFrameBuffersWidth(1920, 1080);
+                        updateFrameBuffersSize(1920, 1080);
                         break;
                     case 6:
-                        updateFrameBuffersWidth(2560, 1440);
+                        updateFrameBuffersSize(2560, 1440);
                         break;
                     case 7:
-                        updateFrameBuffersWidth(3840, 2160);
+                        updateFrameBuffersSize(3840, 2160);
                         break;
                 }
 
@@ -513,9 +537,6 @@ void update(void *) {
 
     glUseProgram(program->getProgram());
 
-    program->setUniformValue("resolution", uResolutionValue);
-    program->setUniformValue("mouse", uMouseValue);
-    program->setUniformValue("time", uTimeValue);
     program->applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
@@ -584,7 +605,7 @@ void update(void *) {
     std::swap(writeBufferIndex, readBufferIndex);
 
     for (GLenum error = glGetError(); error; error = glGetError()) {
-        AppLog::getInstance().addLog("error code: %0X\n", error);
+        AppLog::getInstance().addLog("error code: 0x%0X\n", error);
     }
 
     glfwPollEvents();
@@ -704,7 +725,7 @@ int main(void) {
     glGenRenderbuffers(2, depthBuffers);
     glGenTextures(2, backBuffers);
 
-    updateFrameBuffersWidth(windowWidth, windowHeight);
+    updateFrameBuffersSize(windowWidth, windowHeight);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);

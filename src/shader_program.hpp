@@ -57,8 +57,10 @@ struct ShaderUniform {
     UniformType type;
     std::string name;
     GLint location;
-
     ShaderUniformValue value;
+
+    ShaderUniform();
+    const std::string toString() const;
 };
 
 struct ShaderAttribute {
@@ -79,8 +81,8 @@ class ShaderProgram {
     double compileTime = 0;
     std::string error = "";
 
-    std::map<std::string, ShaderUniform> uniforms;
-    std::map<std::string, ShaderAttribute> attributes;
+    std::map<const std::string, ShaderUniform> uniforms;
+    std::map<const std::string, ShaderAttribute> attributes;
 
     bool ok = false;
 
@@ -96,6 +98,8 @@ class ShaderProgram {
     void setUniformInteger(const std::string &name, int value);
     void setUniformFloat(const std::string &name, float value);
     void setUniformVector2(const std::string &name, const glm::vec2 &value);
+    void setUniformVector3(const std::string &name, const glm::vec3 &value);
+    void setUniformVector4(const std::string &name, const glm::vec4 &value);
 
     void loadUniforms();
     void loadAttributes();
@@ -107,7 +111,11 @@ class ShaderProgram {
     void applyAttribute(const std::string &name);
     void applyAttributes();
 
+    void setUniformValue(const std::string &name,
+                         const ShaderUniformValue &value);
     void setUniformValue(const std::string &name, const glm::vec2 &value);
+    void setUniformValue(const std::string &name, const glm::vec3 &value);
+    void setUniformValue(const std::string &name, const glm::vec4 &value);
     void setUniformValue(const std::string &name, float value);
     void setUniformValue(const std::string &name, int value);
 
@@ -118,6 +126,9 @@ class ShaderProgram {
     GLuint getProgram() const { return program; }
     const Shader &getVertexShader() { return vertexShader; }
     const Shader &getFragmentShader() { return fragmentShader; }
+    std::map<const std::string, ShaderUniform> &getUniforms() {
+        return uniforms;
+    }
     bool isOK() const { return ok; }
     bool checkExpired() const;
     const std::string &getError() const { return error; }
