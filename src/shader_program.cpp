@@ -65,6 +65,13 @@ bool Shader::checkExpiredWithReset() {
 void ShaderProgram::attribute(const std::string &name, GLint size, GLenum type,
                               GLboolean normalized, GLsizei stride,
                               const void *pointer) {
+    GLint location = glGetAttribLocation(program, name.c_str());
+    attribute(name, size, type, location, normalized, stride, pointer);
+}
+
+void ShaderProgram::attribute(const std::string &name, GLint location,
+                              GLint size, GLenum type, GLboolean normalized,
+                              GLsizei stride, const void *pointer) {
     ShaderAttribute &attr = this->attributes[name];
     attr.name = name;
     attr.size = size;
@@ -72,7 +79,18 @@ void ShaderProgram::attribute(const std::string &name, GLint size, GLenum type,
     attr.normalized = normalized;
     attr.stride = stride;
     attr.pointer = pointer;
-    attr.location = glGetAttribLocation(program, name.c_str());
+    attr.location = location;
+}
+
+void ShaderProgram::applyAttribute(const std::string &name) {
+    const ShaderAttribute &attr = attributes[name];
+
+    if (attr.location < 0) {
+        return;
+    }
+
+    glVertexAttribPointer(attr.location, attr.size, attr.type, attr.normalized,
+                          attr.stride, attr.pointer);
 }
 
 void ShaderProgram::applyAttributes() {
@@ -91,6 +109,11 @@ void ShaderProgram::applyAttributes() {
 
 GLint ShaderProgram::uniform(const std::string &name, UniformType type) {
     GLint location = glGetUniformLocation(program, name.c_str());
+    return uniform(name, location, type);
+}
+
+GLint ShaderProgram::uniform(const std::string &name, GLint location,
+                             UniformType type) {
     ShaderUniform &u = uniforms[name];
     u.name = name;
     u.location = location;
@@ -128,16 +151,19 @@ void ShaderProgram::setUniformValue(const std::string &name, int value) {
 }
 
 void ShaderProgram::copyAttributesFrom(const ShaderProgram &program) {
-    for (auto iter = program.attributes.begin(); iter != program.attributes.end(); iter++) {
+    for (auto iter = program.attributes.begin();
+         iter != program.attributes.end(); iter++) {
         const std::string &name = iter->first;
         const ShaderAttribute &attr = iter->second;
 
-        this->attribute(name, attr.size, attr.type, attr.normalized, attr.stride, attr.pointer);
+        this->attribute(name, attr.size, attr.type, attr.normalized,
+                        attr.stride, attr.pointer);
     }
 }
 
 void ShaderProgram::copyUniformsFrom(const ShaderProgram &program) {
-    for (auto iter = program.uniforms.begin(); iter != program.uniforms.end(); iter++) {
+    for (auto iter = program.uniforms.begin(); iter != program.uniforms.end();
+         iter++) {
         const std::string &name = iter->first;
         const ShaderUniform &u = iter->second;
 
@@ -205,6 +231,10 @@ bool ShaderProgram::checkExpiredWithReset() {
 
 GLuint ShaderProgram::compile(const std::string &vsPath,
                               const std::string &fsPath) {
+    AppLog::getInstance().addLog("(%s, %s): compling started.\n",
+                                 vsPath.c_str(),
+                                 fsPath.c_str());
+
     double t0 = glfwGetTime();
 
     reset();
@@ -231,6 +261,9 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
         return 0;
     }
 
+    loadAttributes();
+    loadUniforms();
+
     compileTime = glfwGetTime() - t0;
     ok = true;
 
@@ -245,6 +278,10 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
                                         const std::string &vsSource,
                                         const std::string &fsPath,
                                         const std::string &fsSource) {
+    AppLog::getInstance().addLog("(%s, %s): compling started.\n",
+                                 vsPath.c_str(),
+                                 fsPath.c_str());
+
     double t0 = glfwGetTime();
 
     reset();
@@ -272,6 +309,9 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
         return 0;
     }
 
+    loadAttributes();
+    loadUniforms();
+
     compileTime = glfwGetTime() - t0;
     ok = true;
 
@@ -280,6 +320,87 @@ GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
                                  fragmentShader.getPath().c_str(), compileTime);
 
     return program;
+}
+
+void ShaderProgram::loadUniforms() {
+    GLint count;
+    glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
+    AppLog::getInstance().addLog("Active Uniforms: %d\n", count);
+    for (GLint i = 0; i < count; i++) {
+        const GLsizei bufSize = 128;
+        GLchar name[bufSize];
+        GLsizei length;
+        GLint size;
+        GLenum type;
+
+        glGetActiveUniform(program, (GLuint)i, bufSize, &length, &size, &type,
+                           name);
+
+        switch (type) {
+            case GL_FLOAT:
+                uniform(name, i, UniformType::Float);
+                setUniformValue(name, 0.0f);
+                AppLog::getInstance().addLog(
+                    "Uniform #%d Type: Float, Name: %s\n", i, name);
+                break;
+            case GL_FLOAT_VEC2:
+                uniform(name, i, UniformType::Vector2);
+                setUniformValue(name, glm::vec2(0.0f, 0.0f));
+                AppLog::getInstance().addLog(
+                    "Uniform #%d Type: Vector2, Name: %s\n", i, name);
+                break;
+            case GL_INT:
+                uniform(name, i, UniformType::Integer);
+                setUniformValue(name, 0);
+                AppLog::getInstance().addLog(
+                    "Uniform #%d Type: Integer, Name: %s\n", i, name);
+                break;
+            case GL_SAMPLER_2D:
+                uniform(name, i, UniformType::Sampler2D);
+                setUniformValue(name, 0);
+                AppLog::getInstance().addLog(
+                    "Uniform #%d Type: Sampler2D, Name: %s\n", i, name);
+                break;
+            default:
+                AppLog::getInstance().addLog(
+                    "[Warning] Unsupported uniform #%d Type: 0x%04X Name: %s\n",
+                    i, type, name);
+                break;
+        }
+    }
+}
+
+void ShaderProgram::loadAttributes() {
+    GLint count;
+
+    glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &count);
+    AppLog::getInstance().addLog("Active Attributes: %d\n", count);
+
+    for (int i = 0; i < count; i++) {
+        const GLsizei bufSize = 128;
+        GLchar name[bufSize];
+        GLsizei length;
+        GLint size;
+        GLenum type;
+
+        glGetActiveAttrib(program, (GLuint)i, bufSize, &length, &size, &type,
+                          name);
+
+        switch (type) {
+            case GL_FLOAT_VEC2:
+                attribute(name, i, 2, GL_FLOAT, false, 0, 0);
+                break;
+            case GL_FLOAT_VEC3:
+                attribute(name, i, 3, GL_FLOAT, false, 0, 0);
+                break;
+            case GL_FLOAT_VEC4:
+                attribute(name, i, 4, GL_FLOAT, false, 0, 0);
+                break;
+        }
+
+        AppLog::getInstance().addLog("Attribute #%d Type: %04X Name: %s\n", i,
+                                     type, name);
+    }
 }
 
 void ShaderProgram::link() {

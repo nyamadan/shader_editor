@@ -75,7 +75,7 @@ void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
-void updateFrameBuffers(GLint width, GLint height) {
+void updateFrameBuffersWidth(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
@@ -298,7 +298,7 @@ void update(void *) {
     // onResizeWindow
     if (frameEnd == 0) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
-            updateFrameBuffers(static_cast<GLint>(currentWidth * bufferScale),
+            updateFrameBuffersWidth(static_cast<GLint>(currentWidth * bufferScale),
                                static_cast<GLint>(currentHeight * bufferScale));
         }
     }
@@ -354,6 +354,7 @@ void update(void *) {
             ss.str(std::string());
             ss << uMouseValue.x << ", " << uMouseValue.y;
             ImGui::LabelText("mouse", "%s", ss.str().c_str());
+
             ss.clear();
         }
 
@@ -384,7 +385,7 @@ void update(void *) {
                 // update framebuffers
                 bufferScale =
                     1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
-                updateFrameBuffers(
+                updateFrameBuffersWidth(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
 
@@ -430,28 +431,28 @@ void update(void *) {
 
                 switch (uiVideoResolution) {
                     case 0:
-                        updateFrameBuffers(256, 144);
+                        updateFrameBuffersWidth(256, 144);
                         break;
                     case 1:
-                        updateFrameBuffers(427, 240);
+                        updateFrameBuffersWidth(427, 240);
                         break;
                     case 2:
-                        updateFrameBuffers(640, 360);
+                        updateFrameBuffersWidth(640, 360);
                         break;
                     case 3:
-                        updateFrameBuffers(720, 480);
+                        updateFrameBuffersWidth(720, 480);
                         break;
                     case 4:
-                        updateFrameBuffers(1280, 720);
+                        updateFrameBuffersWidth(1280, 720);
                         break;
                     case 5:
-                        updateFrameBuffers(1920, 1080);
+                        updateFrameBuffersWidth(1920, 1080);
                         break;
                     case 6:
-                        updateFrameBuffers(2560, 1440);
+                        updateFrameBuffersWidth(2560, 1440);
                         break;
                     case 7:
-                        updateFrameBuffers(3840, 2160);
+                        updateFrameBuffersWidth(3840, 2160);
                         break;
                 }
 
@@ -675,18 +676,10 @@ int main(void) {
     // Compile shaders.
     program.reset(new ShaderProgram());
     program->compile(vertexShaderPath, fragmentShaderPath);
-    assert(program->getProgram());
-
-    // getProgramLocation
-    program->attribute("aPosition", 3);
-    program->uniform("time", UniformType::Float);
-    program->uniform("mouse", UniformType::Vector2);
-    program->uniform("resolution", UniformType::Vector2);
+    assert(program->isOK());
 
     copyProgram.compile(vertexShaderPath, copyFS);
-    assert(copyProgram.getProgram());
-    copyProgram.uniform("resolution", UniformType::Vector2);
-    copyProgram.uniform("backbuffer", UniformType::Sampler2D);
+    assert(copyProgram.isOK());
 
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);
@@ -711,7 +704,7 @@ int main(void) {
     glGenRenderbuffers(2, depthBuffers);
     glGenTextures(2, backBuffers);
 
-    updateFrameBuffers(windowWidth, windowHeight);
+    updateFrameBuffersWidth(windowWidth, windowHeight);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);

@@ -84,21 +84,29 @@ class ShaderProgram {
 
     bool ok = false;
 
+    void attribute(const std::string &name, GLint location, GLint size,
+                   GLenum type, GLboolean normalized, GLsizei stride,
+                   const void *pointer);
+
+    void attribute(const std::string &name, GLint size, GLenum type,
+                   GLboolean normalized, GLsizei stride, const void *pointer);
+    GLint uniform(const std::string &name, UniformType type);
+    GLint uniform(const std::string &name, GLint location, UniformType type);
     void link();
+    void setUniformInteger(const std::string &name, int value);
+    void setUniformFloat(const std::string &name, float value);
+    void setUniformVector2(const std::string &name, const glm::vec2 &value);
+
+    void loadUniforms();
+    void loadAttributes();
 
    public:
     ShaderProgram() {}
     ~ShaderProgram() { reset(); }
 
-    void attribute(const std::string &name, GLint size = 3,
-                   GLenum type = GL_FLOAT, GLboolean normalized = GL_FALSE,
-                   GLsizei stride = 0, const void *pointer = 0);
+    void applyAttribute(const std::string &name);
     void applyAttributes();
 
-    GLint uniform(const std::string &name, UniformType type);
-    void setUniformInteger(const std::string &name, int value);
-    void setUniformFloat(const std::string &name, float value);
-    void setUniformVector2(const std::string &name, const glm::vec2 &value);
     void setUniformValue(const std::string &name, const glm::vec2 &value);
     void setUniformValue(const std::string &name, float value);
     void setUniformValue(const std::string &name, int value);
