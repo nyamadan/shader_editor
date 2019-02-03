@@ -27,6 +27,7 @@ const char *const DefaultAssetPath = "default";
 const char *const DefaultVertexShaderName = "vert.glsl";
 const char *const DefaultFragmentShaderName = "frag.glsl";
 const char *const CopyFragmentShaderName = "copy.glsl";
+const char *const ShaderToyPreSourceName = "pre_shadertoy.glsl";
 
 std::string assetPath;
 
@@ -42,7 +43,9 @@ GLuint vIndex = 0;
 GLuint vPosition = 0;
 GLuint vertexArraysObject = 0;
 
-std::shared_ptr<ShaderProgram> program;
+std::string shaderToyPreSource;
+
+std::unique_ptr<ShaderProgram> program;
 ShaderProgram copyProgram;
 
 int writeBufferIndex = 0;
@@ -61,7 +64,7 @@ time_t lastMTimeFS = 0;
 uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 time_t currentFrame = 0;
-time_t frameEnd = 0;
+bool isRecording = false;
 FILE *fVideo;
 
 TextEditor editor;
@@ -121,9 +124,9 @@ void ShowTextEditor(bool &showTextEditor) {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Save")) {
-                const std::string &textToSave = editor.GetText();
-                const char *const buffer = textToSave.c_str();
-                const size_t size = textToSave.size();
+                const auto &textToSave = editor.GetText();
+                const auto buffer = textToSave.c_str();
+                const auto size = textToSave.size();
                 writeText(program->getFragmentShader().getPath(), buffer, size);
             }
 
@@ -134,7 +137,7 @@ void ShowTextEditor(bool &showTextEditor) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            bool ro = editor.IsReadOnly();
+            auto ro = editor.IsReadOnly();
             if (ImGui::MenuItem("Read-only mode", nullptr, &ro))
                 editor.SetReadOnly(ro);
             ImGui::Separator();
@@ -158,8 +161,10 @@ void ShowTextEditor(bool &showTextEditor) {
                                 !ro && editor.HasSelection()))
                 editor.Delete();
             if (ImGui::MenuItem("Paste", "Ctrl-V", nullptr,
-                                !ro && ImGui::GetClipboardText() != nullptr))
+                                !ro && ImGui::GetClipboardText() != nullptr)) {
                 editor.Paste();
+                editor.SetText(editor.GetText());
+            }
 
             ImGui::Separator();
 
@@ -194,13 +199,17 @@ void ShowTextEditor(bool &showTextEditor) {
     ImGui::End();
 }
 
-void applyErrorMarker(std::shared_ptr<ShaderProgram> program) {
+void applyErrorMarker(const std::unique_ptr<ShaderProgram> &program) {
     TextEditor::ErrorMarkers markers;
     if (!program->isOK()) {
         const Shader &fs = program->getFragmentShader();
 
         if (!fs.isOK()) {
-            const std::string &error = fs.getError();
+            const auto &preSource = fs.getPreSource();
+            const auto &error = fs.getError();
+
+            const auto preSourceLines =
+                std::count(preSource.begin(), preSource.end(), '\n');
 #ifdef __EMSCRIPTEN__
             const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
 #else
@@ -212,8 +221,9 @@ void applyErrorMarker(std::shared_ptr<ShaderProgram> program) {
                 std::smatch m;
                 std::regex_match(line, m, re);
                 if (m.size() == 3) {
-                    int lineNumber = std::atoi(m[1].str().c_str());
-                    const std::string message = m[2].str();
+                    auto lineNumber =
+                        std::atoi(m[1].str().c_str()) - preSourceLines;
+                    const auto message = m[2].str();
 
                     auto pair = std::make_pair(lineNumber, message);
                     markers.insert(pair);
@@ -231,16 +241,13 @@ void update(void *) {
     static bool showAppLogWindow = false;
     static bool showTextEditor = false;
 
-    static int uiBufferQuality = 2;
-    static bool uiPlaying = true;
     static float uiTimeValue = 0;
+    static bool uiPlaying = true;
+
+    static int uiPlatform = 0;
+    static int uiBufferQuality = 2;
     static int uiVideoResolution = 2;
     static float uiVideoTime = 5.0f;
-
-    // Uniforms
-    float uTimeValue;
-    glm::vec2 uResolutionValue;
-    glm::vec2 uMouseValue;
 
     int currentWidth, currentHeight;
     double xpos, ypos;
@@ -249,16 +256,35 @@ void update(void *) {
 
     float now = static_cast<float>(ImGui::GetTime());
 
-    std::shared_ptr<ShaderProgram> newProgram(new ShaderProgram());
+    const char *uMouseName = nullptr;
+    const char *uResolutionName = nullptr;
+    const char *uTimeName = nullptr;
+    switch (uiPlatform) {
+        case 0:
+            uTimeName = "time";
+            uResolutionName = "resolution";
+            uMouseName = "mouse";
+            break;
+        case 1:
+            uTimeName = "iTime";
+            uResolutionName = "iResolution";
+            uMouseName = "iMouse";
+            break;
+    }
+
+    auto newProgram = std::make_unique<ShaderProgram>();
 
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
             if (showTextEditor) {
-                char *buffer;
-                readText(program->getFragmentShader().getPath(), buffer);
-                editor.SetText(buffer);
-                delete[] buffer;
+                char *memblock;
+                readText(program->getFragmentShader().getPath(), memblock);
+                editor.SetText(memblock);
+                delete[] memblock;
             } else {
+                if (uiPlatform == 1) {
+                    newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+                }
                 newProgram->compile(program->getVertexShader().getPath(),
                                     program->getFragmentShader().getPath());
                 applyErrorMarker(newProgram);
@@ -269,10 +295,14 @@ void update(void *) {
     }
 
     if (showTextEditor && editor.IsTextChanged()) {
-        newProgram->compileWithSource(program->getVertexShader().getPath(),
-                                      program->getVertexShader().getSource(),
-                                      program->getFragmentShader().getPath(),
-                                      editor.GetText());
+        if (uiPlatform == 1) {
+            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+        }
+
+        newProgram->compile(program->getVertexShader().getPath(),
+                            program->getFragmentShader().getPath(),
+                            program->getVertexShader().getSource(),
+                            editor.GetText());
         applyErrorMarker(newProgram);
     }
 
@@ -286,7 +316,6 @@ void update(void *) {
         glBindVertexArray(0);
 
         glUseProgram(newProgram->getProgram());
-        glDeleteProgram(program->getProgram());
 
         program.swap(newProgram);
     }
@@ -296,7 +325,7 @@ void update(void *) {
     glfwGetCursorPos(mainWindow, &xpos, &ypos);
 
     // onResizeWindow
-    if (frameEnd == 0) {
+    if (!isRecording) {
         if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
             updateFrameBuffersSize(
                 static_cast<GLint>(currentWidth * bufferScale),
@@ -307,32 +336,56 @@ void update(void *) {
     windowWidth = currentWidth;
     windowHeight = currentHeight;
 
-    // uniform values
-    uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
-    uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
-    uMouseValue.x = static_cast<GLfloat>(xpos) / windowWidth;
-    uMouseValue.y = 1.0f - static_cast<GLfloat>(ypos) / windowHeight;
-
-    if (frameEnd > 0) {
-        uTimeValue = currentFrame * 30.0f / 1001.0f;
+    if (isRecording) {
+        uiTimeValue = static_cast<float>(static_cast<double>(currentFrame) *
+                                         (1001.0 / 30000.0));
     } else {
         if (!uiPlaying) {
             timeStart = now - uiTimeValue;
-            uTimeValue = uiTimeValue;
+            uiTimeValue = uiTimeValue;
         } else {
-            uTimeValue = now - timeStart;
+            uiTimeValue = now - timeStart;
         }
     }
-
-    program->setUniformValue("resolution", uResolutionValue);
-    program->setUniformValue("mouse", uMouseValue);
-    program->setUniformValue("time", uTimeValue);
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
     if (showDebugWindow) {
+        if (ImGui::CollapsingHeader("Platform")) {
+            const char *const items[] = {"glslsandbox", "shadertoy"};
+            if (ImGui::Combo("platform", &uiPlatform, items,
+                             IM_ARRAYSIZE(items))) {
+                auto newProgram = std::make_unique<ShaderProgram>();
+
+                if (uiPlatform == 1) {
+                    newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+                }
+
+                newProgram->compile(program->getVertexShader().getPath(),
+                                    program->getFragmentShader().getPath(),
+                                    program->getVertexShader().getSource(),
+                                    editor.GetText());
+
+                applyErrorMarker(newProgram);
+
+                if (newProgram->isOK()) {
+                    newProgram->copyAttributesFrom(*program);
+                    newProgram->copyUniformsFrom(*program);
+
+                    glBindVertexArray(vertexArraysObject);
+                    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+                    newProgram->applyAttributes();
+                    glBindVertexArray(0);
+
+                    glUseProgram(newProgram->getProgram());
+
+                    program.swap(newProgram);
+                }
+            }
+        }
+
         if (ImGui::CollapsingHeader("Stats")) {
             std::stringstream ss;
 
@@ -353,8 +406,8 @@ void update(void *) {
                     continue;
                 }
 
-                if (u.name == "time" || u.name == "resolution" ||
-                    u.name == "mouse") {
+                if (u.name == uTimeName || u.name == uResolutionName ||
+                    u.name == uMouseName) {
                     ImGui::LabelText(u.name.c_str(), "%s",
                                      u.toString().c_str());
                     continue;
@@ -366,6 +419,10 @@ void update(void *) {
                         break;
                     case UniformType::Integer:
                         ImGui::DragInt(u.name.c_str(), &u.value.i);
+                        break;
+                    case UniformType::Sampler2D:
+                        break;
+                    case UniformType::Vector1:
                         break;
                     case UniformType::Vector2:
                         ImGui::DragFloat2(u.name.c_str(),
@@ -386,24 +443,21 @@ void update(void *) {
         if (ImGui::CollapsingHeader("Time")) {
             if (uiPlaying) {
                 ImGui::LabelText("time", "%s",
-                                 std::to_string(uTimeValue).c_str());
+                                 std::to_string(uiTimeValue).c_str());
             } else {
                 ImGui::DragFloat("time", &uiTimeValue, 0.5f);
             }
 
-            if (ImGui::Checkbox("Playing", &uiPlaying)) {
-                uiTimeValue = uTimeValue;
-            }
+            ImGui::Checkbox("Playing", &uiPlaying);
 
             if (ImGui::Button("Reset")) {
                 timeStart = now;
                 uiTimeValue = 0;
-                uTimeValue = 0;
             }
         }
 
         if (ImGui::CollapsingHeader("Buffer")) {
-            const char *items[] = {"0.5", "1", "2", "4", "8"};
+            const char *const items[] = {"0.5", "1", "2", "4", "8"};
             if (ImGui::Combo("quality", &uiBufferQuality, items,
                              IM_ARRAYSIZE(items))) {
                 // update framebuffers
@@ -412,14 +466,6 @@ void update(void *) {
                 updateFrameBuffersSize(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
-
-                // uniform values
-                uResolutionValue.x = static_cast<GLfloat>(bufferWidth);
-                uResolutionValue.y = static_cast<GLfloat>(bufferHeight);
-                uMouseValue.x =
-                    static_cast<GLfloat>(xpos) * bufferScale / (bufferWidth);
-                uMouseValue.y = 1.0f - static_cast<GLfloat>(ypos) *
-                                           bufferScale / (bufferHeight);
             }
 
             std::stringstream windowStringStream;
@@ -448,10 +494,9 @@ void update(void *) {
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
             if (ImGui::Button("Save")) {
-                frameEnd =
-                    static_cast<time_t>(ceil(30000.0f / 1001.0f * uiVideoTime));
+                isRecording = true;
                 currentFrame = 0;
-                uTimeValue = 0;
+                uiTimeValue = 0;
 
                 switch (uiVideoResolution) {
                     case 0:
@@ -480,6 +525,12 @@ void update(void *) {
                         break;
                 }
 
+                // update framebuffers
+                bufferScale =
+                    1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
+                updateFrameBuffersSize(
+                    static_cast<GLint>(currentWidth * bufferScale),
+                    static_cast<GLint>(currentHeight * bufferScale));
                 fVideo = fopen("video.y4m", "wb");
 
                 fprintf(
@@ -492,7 +543,7 @@ void update(void *) {
 
             if (ImGui::BeginPopupModal("Export Progress", NULL,
                                        ImGuiWindowFlags_AlwaysAutoResize)) {
-                if (frameEnd == 0) {
+                if (!isRecording) {
                     ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
 
                     ImGui::Separator();
@@ -501,9 +552,8 @@ void update(void *) {
                         ImGui::CloseCurrentPopup();
                     }
                 } else {
-                    ImGui::ProgressBar(
-                        static_cast<float>(currentFrame) / frameEnd,
-                        ImVec2(200.0f, 15.0f));
+                    auto value = uiTimeValue / uiVideoTime;
+                    ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
                 }
 
                 ImGui::EndPopup();
@@ -537,12 +587,33 @@ void update(void *) {
 
     glUseProgram(program->getProgram());
 
+    // uniform values
+    program->setUniformValue(uResolutionName,
+                             glm::vec2(static_cast<GLfloat>(bufferWidth),
+                                       static_cast<GLfloat>(bufferHeight)));
+
+    switch (uiPlatform) {
+        case 0:
+            program->setUniformValue(
+                uMouseName,
+                glm::vec2(static_cast<GLfloat>(xpos) / windowWidth,
+                          1.0f - static_cast<GLfloat>(ypos) / windowHeight));
+            break;
+        case 1:
+            program->setUniformValue(
+                uMouseName,
+                glm::vec4(static_cast<GLfloat>(xpos),
+                          windowHeight - static_cast<GLfloat>(ypos), 0, 0));
+            break;
+    }
+
+    program->setUniformValue(uTimeName, uiTimeValue);
     program->applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 
-    if (frameEnd != 0) {
+    if (isRecording) {
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                      rgbaBuffer);
 
@@ -573,10 +644,10 @@ void update(void *) {
 
         currentFrame++;
 
-        if (frameEnd <= currentFrame) {
+        if (uiTimeValue >= uiVideoTime) {
             fclose(fVideo);
             fVideo = nullptr;
-            frameEnd = 0;
+            isRecording = false;
         }
     }
 
@@ -649,6 +720,19 @@ int main(void) {
 #endif
     copyFS.append(CopyFragmentShaderName);
 
+    std::string shaderToyPreSourcePath = DefaultAssetPath;
+#ifdef WIN32
+    if (shaderToyPreSourcePath.back() != '\\' &&
+        shaderToyPreSourcePath.back() != '/') {
+        shaderToyPreSourcePath.append("\\");
+    }
+#else
+    if (shaderToyPreSourcePath.back() != '\\') {
+        shaderToyPreSourcePath.append("/");
+    }
+#endif
+    shaderToyPreSourcePath.append(ShaderToyPreSourceName);
+
     if (!glfwInit()) return -1;
 
     glfwSetErrorCallback(glfwErrorCallback);
@@ -693,6 +777,12 @@ int main(void) {
     ImGui_ImplOpenGL3_Init(GlslVersion);
 
     glfwMakeContextCurrent(mainWindow);
+
+    // load pre source
+    char *memblock = nullptr;
+    readText(shaderToyPreSourcePath, memblock);
+    shaderToyPreSource = memblock;
+    delete[] memblock;
 
     // Compile shaders.
     program.reset(new ShaderProgram());

@@ -6,32 +6,41 @@
 
 #include <sstream>
 
+void Shader::setPreSource(const std::string &preSource) {
+    this->preSource = preSource;
+}
+
 void Shader::reset() {
     if (shader != 0) {
         glDeleteShader(shader);
     }
+
     type = 0;
     shader = 0;
     path = "(empty)";
     source = "";
+    preSource = "";
     error = "";
     ok = false;
 
     mTime = 0;
 }
 
-bool Shader::compileWithSource(const std::string &path,
-                               const std::string &source, GLuint type) {
-    reset();
-
+bool Shader::compile(const std::string &path, GLuint type,
+                     const std::string &source) {
     this->type = type;
     this->path = path;
     this->mTime = getMTime(path);
-    this->source = std::string(source);
+    this->source = source;
+
+    std::string combinedSource;
+
+    combinedSource.append(preSource);
+    combinedSource.append(source);
 
     shader = glCreateShader(type);
-    const auto pSource = source.c_str();
-    glShaderSource(shader, 1, &pSource, NULL);
+    const auto pCombinedSource = combinedSource.c_str();
+    glShaderSource(shader, 1, &pCombinedSource, NULL);
     glCompileShader(shader);
 
     if (!checkCompiled(shader, error)) {
@@ -47,7 +56,7 @@ bool Shader::compileWithSource(const std::string &path,
 bool Shader::compile(const std::string &path, GLuint type) {
     char *source = nullptr;
     readText(path, source, mTime);
-    auto result = compileWithSource(path, source, type);
+    auto result = compile(path, type, source);
     delete[] source;
     return result;
 }
@@ -189,8 +198,8 @@ void ShaderProgram::setUniformValue(const std::string &name, int value) {
 void ShaderProgram::copyAttributesFrom(const ShaderProgram &program) {
     for (auto iter = program.attributes.begin();
          iter != program.attributes.end(); iter++) {
-        const std::string &name = iter->first;
-        const ShaderAttribute &attr = iter->second;
+        const auto &name = iter->first;
+        const auto &attr = iter->second;
 
         this->attribute(name, attr.size, attr.type, attr.normalized,
                         attr.stride, attr.pointer);
@@ -224,6 +233,8 @@ void ShaderProgram::applyUniforms() {
             case UniformType::Sampler2D:
                 glUniform1i(u.location, u.value.i);
                 break;
+            case UniformType::Vector1:
+                break;
             case UniformType::Vector2:
                 glUniform2fv(u.location, 1, glm::value_ptr(u.value.vec2));
                 break;
@@ -238,6 +249,9 @@ void ShaderProgram::applyUniforms() {
 }
 
 void ShaderProgram::reset() {
+    if (program != 0) {
+        glDeleteProgram(program);
+    }
     vertexShader.reset();
     fragmentShader.reset();
     attributes.clear();
@@ -260,12 +274,15 @@ bool ShaderProgram::checkExpiredWithReset() {
 
 GLuint ShaderProgram::compile(const std::string &vsPath,
                               const std::string &fsPath) {
+    if (program != 0) {
+        glDeleteProgram(program);
+        program = 0;
+    }
+
     AppLog::getInstance().addLog("(%s, %s): compling started.\n",
                                  vsPath.c_str(), fsPath.c_str());
 
     auto t0 = glfwGetTime();
-
-    reset();
 
     if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER)) {
         AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
@@ -302,26 +319,27 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
     return program;
 }
 
-GLuint ShaderProgram::compileWithSource(const std::string &vsPath,
-                                        const std::string &vsSource,
-                                        const std::string &fsPath,
-                                        const std::string &fsSource) {
+GLuint ShaderProgram::compile(const std::string &vsPath,
+                              const std::string &fsPath,
+                              const std::string &vsSource,
+                              const std::string &fsSource) {
+    if (program != 0) {
+        glDeleteProgram(program);
+        program = 0;
+    }
     AppLog::getInstance().addLog("(%s, %s): compling started.\n",
                                  vsPath.c_str(), fsPath.c_str());
 
     auto t0 = glfwGetTime();
 
-    reset();
-
-    if (!vertexShader.compileWithSource(vsPath, vsSource, GL_VERTEX_SHADER)) {
+    if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER, vsSource)) {
         AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
                                      vertexShader.getPath().c_str(),
                                      vertexShader.getError().c_str());
         return 0;
     }
 
-    if (!fragmentShader.compileWithSource(fsPath, fsSource,
-                                          GL_FRAGMENT_SHADER)) {
+    if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER, fsSource)) {
         AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
                                      fragmentShader.getPath().c_str(),
                                      fragmentShader.getError().c_str());
@@ -365,37 +383,37 @@ void ShaderProgram::loadUniforms() {
 
         switch (type) {
             case GL_FLOAT:
-                uniform(name, i, UniformType::Float);
+                uniform(name, UniformType::Float);
                 setUniformValue(name, 0.0f);
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Float, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC2:
-                uniform(name, i, UniformType::Vector2);
+                uniform(name, UniformType::Vector2);
                 setUniformValue(name, glm::vec2(0.0f, 0.0f));
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Vector2, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC3:
-                uniform(name, i, UniformType::Vector3);
+                uniform(name, UniformType::Vector3);
                 setUniformValue(name, glm::vec3(0.0f, 0.0f, 0.0f));
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Vector3, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC4:
-                uniform(name, i, UniformType::Vector4);
+                uniform(name, UniformType::Vector4);
                 setUniformValue(name, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Vector4, Name: %s\n", i, name);
                 break;
             case GL_INT:
-                uniform(name, i, UniformType::Integer);
+                uniform(name, UniformType::Integer);
                 setUniformValue(name, 0);
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Integer, Name: %s\n", i, name);
                 break;
             case GL_SAMPLER_2D:
-                uniform(name, i, UniformType::Sampler2D);
+                uniform(name, UniformType::Sampler2D);
                 setUniformValue(name, 0);
                 AppLog::getInstance().addLog(
                     "Uniform #%d Type: Sampler2D, Name: %s\n", i, name);

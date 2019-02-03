@@ -13,6 +13,7 @@ class Shader {
     std::string path = "(empty)";
     std::string source = "";
     std::string error = "";
+    std::string preSource = "";
     bool ok = false;
     time_t mTime = 0;
 
@@ -22,16 +23,18 @@ class Shader {
     const std::string &getSource() const { return source; }
     const std::string &getError() const { return error; }
     const std::string &getPath() const { return path; }
+    const std::string &getPreSource() const { return preSource; }
     bool isOK() const { return ok; }
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
+    void setPreSource(const std::string &preSource);
+    void reset();
     bool checkExpired() const;
     bool checkExpiredWithReset();
 
-    void reset();
     bool compile(const std::string &path, GLuint type);
-    bool compileWithSource(const std::string &path, const std::string &source,
-                           GLuint type);
+    bool compile(const std::string &path, GLuint type,
+                 const std::string &source);
 };
 
 enum UniformType {
@@ -123,21 +126,26 @@ class ShaderProgram {
     void copyAttributesFrom(const ShaderProgram &program);
     void applyUniforms();
 
-    GLuint getProgram() const { return program; }
-    const Shader &getVertexShader() { return vertexShader; }
-    const Shader &getFragmentShader() { return fragmentShader; }
     std::map<const std::string, ShaderUniform> &getUniforms() {
         return uniforms;
     }
+
+    void reset();
+    GLuint getProgram() const { return program; }
+    const Shader &getVertexShader() const { return vertexShader; }
+    const Shader &getFragmentShader() const { return fragmentShader; }
     bool isOK() const { return ok; }
     bool checkExpired() const;
     const std::string &getError() const { return error; }
 
-    void reset();
     bool checkExpiredWithReset();
+    void setVertexShaderPreSource(const std::string preSource) {
+        this->vertexShader.setPreSource(preSource);
+    }
+    void setFragmentShaderPreSource(const std::string preSource) {
+        this->fragmentShader.setPreSource(preSource);
+    }
     GLuint compile(const std::string &vsPath, const std::string &fsPath);
-    GLuint compileWithSource(const std::string &vsPath,
-                             const std::string &vsSource,
-                             const std::string &fsPath,
-                             const std::string &fsSource);
+    GLuint compile(const std::string &vsPath, const std::string &fsPath,
+                   const std::string &vsSource, const std::string &fsSource);
 };
