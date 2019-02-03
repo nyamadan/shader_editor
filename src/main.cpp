@@ -78,6 +78,41 @@ void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
+void compileShaderFromFile(ShaderProgram &program, const std::string &vsPath,
+                           const std::string &fsPath) {
+    const auto vsTime = getMTime(vsPath);
+    const auto fsTime = getMTime(fsPath);
+    std::string vsSource;
+    std::string fsSource;
+    readText(vsPath, vsSource);
+    readText(fsPath, fsSource);
+    program.compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}
+
+void recompileFragmentShader(const ShaderProgram &program,
+                             ShaderProgram &newProgram,
+                             const std::string &fsSource) {
+    const auto &vsPath = program.getVertexShader().getPath();
+    const auto &fsPath = program.getFragmentShader().getPath();
+    const auto vsTime = getMTime(vsPath);
+    const auto fsTime = getMTime(fsPath);
+    const auto &vsSource = program.getVertexShader().getSource();
+    newProgram.compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}
+
+void recompileShaderFromFile(const ShaderProgram &program,
+                             ShaderProgram &newProgram) {
+    const auto &vsPath = program.getVertexShader().getPath();
+    const auto &fsPath = program.getFragmentShader().getPath();
+    const auto vsTime = getMTime(vsPath);
+    const auto fsTime = getMTime(fsPath);
+    std::string vsSource;
+    std::string fsSource;
+    readText(vsPath, vsSource);
+    readText(fsPath, fsSource);
+    newProgram.compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}
+
 void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
@@ -199,39 +234,32 @@ void ShowTextEditor(bool &showTextEditor) {
     ImGui::End();
 }
 
-void applyErrorMarker(const std::unique_ptr<ShaderProgram> &program) {
-    TextEditor::ErrorMarkers markers;
-    if (!program->isOK()) {
-        const Shader &fs = program->getFragmentShader();
-
-        if (!fs.isOK()) {
-            const auto &preSource = fs.getPreSource();
-            const auto &error = fs.getError();
-
-            const auto preSourceLines =
-                std::count(preSource.begin(), preSource.end(), '\n');
-#ifdef __EMSCRIPTEN__
-            const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
-#else
-            const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
-#endif
-            std::istringstream ss(error);
-            std::string line;
-            while (std::getline(ss, line)) {
-                std::smatch m;
-                std::regex_match(line, m, re);
-                if (m.size() == 3) {
-                    auto lineNumber =
-                        std::atoi(m[1].str().c_str()) - preSourceLines;
-                    const auto message = m[2].str();
-
-                    auto pair = std::make_pair(lineNumber, message);
-                    markers.insert(pair);
-                }
-            }
-        }
+void appendPath(std::string &base, const std::string &path) {
+    std::string vertexShaderPath = DefaultAssetPath;
+#ifdef WIN32
+    if (base.back() != '\\' && base.back() != '/') {
+        base.append("\\");
     }
-    editor.SetErrorMarkers(markers);
+#else
+    if (base.back() != '/') {
+        base.append("/");
+    }
+#endif
+    base.append(path);
+}
+
+void swapProgram(std::unique_ptr<ShaderProgram> &newProgram) {
+    newProgram->copyAttributesFrom(*program);
+    newProgram->copyUniformsFrom(*program);
+
+    glBindVertexArray(vertexArraysObject);
+    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+    newProgram->applyAttributes();
+    glBindVertexArray(0);
+
+    glUseProgram(newProgram->getProgram());
+
+    program.swap(newProgram);
 }
 
 void update(void *) {
@@ -250,7 +278,6 @@ void update(void *) {
     static float uiVideoTime = 5.0f;
 
     int currentWidth, currentHeight;
-    double xpos, ypos;
     float bufferScale =
         1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
 
@@ -259,16 +286,19 @@ void update(void *) {
     const char *uMouseName = nullptr;
     const char *uResolutionName = nullptr;
     const char *uTimeName = nullptr;
+    const char *uFrameName = nullptr;
     switch (uiPlatform) {
         case 0:
             uTimeName = "time";
             uResolutionName = "resolution";
             uMouseName = "mouse";
+            uFrameName = "";
             break;
         case 1:
             uTimeName = "iTime";
             uResolutionName = "iResolution";
             uMouseName = "iMouse";
+            uFrameName = "iFrame";
             break;
     }
 
@@ -277,17 +307,16 @@ void update(void *) {
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
             if (showTextEditor) {
-                char *memblock;
-                readText(program->getFragmentShader().getPath(), memblock);
-                editor.SetText(memblock);
-                delete[] memblock;
+                std::string text;
+                readText(program->getFragmentShader().getPath(), text);
+                editor.SetText(text);
             } else {
                 if (uiPlatform == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 }
-                newProgram->compile(program->getVertexShader().getPath(),
-                                    program->getFragmentShader().getPath());
-                applyErrorMarker(newProgram);
+                recompileShaderFromFile(*program, *newProgram);
+                editor.SetErrorMarkers(
+                    newProgram->getFragmentShader().getErrors());
             }
         }
 
@@ -299,38 +328,25 @@ void update(void *) {
             newProgram->setFragmentShaderPreSource(shaderToyPreSource);
         }
 
-        newProgram->compile(program->getVertexShader().getPath(),
-                            program->getFragmentShader().getPath(),
-                            program->getVertexShader().getSource(),
-                            editor.GetText());
-        applyErrorMarker(newProgram);
+        recompileFragmentShader(*program, *newProgram, editor.GetText());
+        editor.SetErrorMarkers(newProgram->getFragmentShader().getErrors());
     }
 
     if (newProgram->isOK()) {
-        newProgram->copyAttributesFrom(*program);
-        newProgram->copyUniformsFrom(*program);
-
-        glBindVertexArray(vertexArraysObject);
-        glBindBuffer(GL_ARRAY_BUFFER, vPosition);
-        newProgram->applyAttributes();
-        glBindVertexArray(0);
-
-        glUseProgram(newProgram->getProgram());
-
-        program.swap(newProgram);
+        swapProgram(newProgram);
     }
 
     glfwMakeContextCurrent(mainWindow);
     glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
-    glfwGetCursorPos(mainWindow, &xpos, &ypos);
+
+    const auto mouseDown = ImGui::GetIO().MouseDown;
+    const auto mousePos = ImGui::GetMousePos();
 
     // onResizeWindow
-    if (!isRecording) {
-        if (currentWidth != bufferWidth || currentHeight != bufferHeight) {
-            updateFrameBuffersSize(
-                static_cast<GLint>(currentWidth * bufferScale),
-                static_cast<GLint>(currentHeight * bufferScale));
-        }
+    if (!isRecording &&
+        (currentWidth != bufferWidth || currentHeight != bufferHeight)) {
+        updateFrameBuffersSize(static_cast<GLint>(currentWidth * bufferScale),
+                               static_cast<GLint>(currentHeight * bufferScale));
     }
 
     windowWidth = currentWidth;
@@ -363,25 +379,14 @@ void update(void *) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 }
 
-                newProgram->compile(program->getVertexShader().getPath(),
-                                    program->getFragmentShader().getPath(),
-                                    program->getVertexShader().getSource(),
-                                    editor.GetText());
+                recompileFragmentShader(*program, *newProgram,
+                                        editor.GetText());
 
-                applyErrorMarker(newProgram);
+                editor.SetErrorMarkers(
+                    newProgram->getFragmentShader().getErrors());
 
                 if (newProgram->isOK()) {
-                    newProgram->copyAttributesFrom(*program);
-                    newProgram->copyUniformsFrom(*program);
-
-                    glBindVertexArray(vertexArraysObject);
-                    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
-                    newProgram->applyAttributes();
-                    glBindVertexArray(0);
-
-                    glUseProgram(newProgram->getProgram());
-
-                    program.swap(newProgram);
+                    swapProgram(newProgram);
                 }
             }
         }
@@ -407,7 +412,7 @@ void update(void *) {
                 }
 
                 if (u.name == uTimeName || u.name == uResolutionName ||
-                    u.name == uMouseName) {
+                    u.name == uMouseName || u.name == uFrameName) {
                     ImGui::LabelText(u.name.c_str(), "%s",
                                      u.toString().c_str());
                     continue;
@@ -453,6 +458,7 @@ void update(void *) {
             if (ImGui::Button("Reset")) {
                 timeStart = now;
                 uiTimeValue = 0;
+                currentFrame = 0;
             }
         }
 
@@ -531,6 +537,7 @@ void update(void *) {
                 updateFrameBuffersSize(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
+
                 fVideo = fopen("video.y4m", "wb");
 
                 fprintf(
@@ -595,15 +602,18 @@ void update(void *) {
     switch (uiPlatform) {
         case 0:
             program->setUniformValue(
-                uMouseName,
-                glm::vec2(static_cast<GLfloat>(xpos) / windowWidth,
-                          1.0f - static_cast<GLfloat>(ypos) / windowHeight));
+                uMouseName, glm::vec2(mousePos.x / windowWidth,
+                                      1.0f - mousePos.y / windowHeight));
             break;
         case 1:
-            program->setUniformValue(
-                uMouseName,
-                glm::vec4(static_cast<GLfloat>(xpos),
-                          windowHeight - static_cast<GLfloat>(ypos), 0, 0));
+            program->setUniformValue(uFrameName,
+                                     static_cast<int>(currentFrame));
+            if (mouseDown[0] || mouseDown[1]) {
+                program->setUniformValue(
+                    uMouseName, glm::vec4(mousePos.x, windowHeight - mousePos.y,
+                                          mouseDown[0] ? 1.0f : 0.0f,
+                                          mouseDown[1] ? 1.0f : 0.0f));
+            }
             break;
     }
 
@@ -649,6 +659,10 @@ void update(void *) {
             fVideo = nullptr;
             isRecording = false;
         }
+    } else {
+        if (uiPlaying) {
+            currentFrame++;
+        }
     }
 
     // copy to frontbuffer
@@ -685,53 +699,14 @@ void update(void *) {
 
 int main(void) {
     std::string vertexShaderPath = DefaultAssetPath;
-#ifdef WIN32
-    if (vertexShaderPath.back() != '\\' && vertexShaderPath.back() != '/') {
-        vertexShaderPath.append("\\");
-    }
-#else
-    if (vertexShaderPath.back() != '/') {
-        vertexShaderPath.append("/");
-    }
-#endif
-    vertexShaderPath.append(DefaultVertexShaderName);
-
     std::string fragmentShaderPath = DefaultAssetPath;
-#ifdef WIN32
-    if (fragmentShaderPath.back() != '\\' && fragmentShaderPath.back() != '/') {
-        fragmentShaderPath.append("\\");
-    }
-#else
-    if (fragmentShaderPath.back() != '/') {
-        fragmentShaderPath.append("/");
-    }
-#endif
-    fragmentShaderPath.append(DefaultFragmentShaderName);
-
-    std::string copyFS = DefaultAssetPath;
-#ifdef WIN32
-    if (copyFS.back() != '\\' && copyFS.back() != '/') {
-        copyFS.append("\\");
-    }
-#else
-    if (copyFS.back() != '/') {
-        copyFS.append("/");
-    }
-#endif
-    copyFS.append(CopyFragmentShaderName);
-
     std::string shaderToyPreSourcePath = DefaultAssetPath;
-#ifdef WIN32
-    if (shaderToyPreSourcePath.back() != '\\' &&
-        shaderToyPreSourcePath.back() != '/') {
-        shaderToyPreSourcePath.append("\\");
-    }
-#else
-    if (shaderToyPreSourcePath.back() != '\\') {
-        shaderToyPreSourcePath.append("/");
-    }
-#endif
-    shaderToyPreSourcePath.append(ShaderToyPreSourceName);
+    std::string copyFS = DefaultAssetPath;
+
+    appendPath(vertexShaderPath, DefaultVertexShaderName);
+    appendPath(fragmentShaderPath, DefaultFragmentShaderName);
+    appendPath(copyFS, CopyFragmentShaderName);
+    appendPath(shaderToyPreSourcePath, ShaderToyPreSourceName);
 
     if (!glfwInit()) return -1;
 
@@ -779,17 +754,14 @@ int main(void) {
     glfwMakeContextCurrent(mainWindow);
 
     // load pre source
-    char *memblock = nullptr;
-    readText(shaderToyPreSourcePath, memblock);
-    shaderToyPreSource = memblock;
-    delete[] memblock;
+    readText(shaderToyPreSourcePath, shaderToyPreSource);
 
     // Compile shaders.
     program.reset(new ShaderProgram());
-    program->compile(vertexShaderPath, fragmentShaderPath);
+    compileShaderFromFile(*program, vertexShaderPath, fragmentShaderPath);
     assert(program->isOK());
 
-    copyProgram.compile(vertexShaderPath, copyFS);
+    compileShaderFromFile(copyProgram, vertexShaderPath, copyFS);
     assert(copyProgram.isOK());
 
     // Initialize Buffers

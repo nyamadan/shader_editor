@@ -2,6 +2,8 @@
 
 #include "common.hpp"
 #include <map>
+#include <regex>
+#include <sstream>
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -12,16 +14,41 @@ class Shader {
     GLuint type = 0;
     std::string path = "(empty)";
     std::string source = "";
-    std::string error = "";
     std::string preSource = "";
+    std::map<int, std::string> errors;
     bool ok = false;
     time_t mTime = 0;
+
+    void parseErrors(const std::string &error) {
+        const auto preSourceLines = static_cast<int>(
+            std::count(preSource.begin(), preSource.end(), '\n'));
+#ifdef __EMSCRIPTEN__
+        const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
+#else
+        const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
+#endif
+        std::istringstream ss(error);
+        std::string line;
+        while (std::getline(ss, line)) {
+            std::smatch m;
+            std::regex_match(line, m, re);
+            if (m.size() == 3) {
+                const auto lineNumber =
+                    std::atoi(m[1].str().c_str()) - preSourceLines;
+                const auto message = m[2].str();
+
+                errors.insert(std::make_pair(lineNumber, message));
+            }
+        }
+    }
 
    public:
     Shader() {}
     ~Shader() { reset(); }
     const std::string &getSource() const { return source; }
-    const std::string &getError() const { return error; }
+    const std::map<int, std::string> &getErrors() const {
+        return errors;
+    }
     const std::string &getPath() const { return path; }
     const std::string &getPreSource() const { return preSource; }
     bool isOK() const { return ok; }
@@ -32,9 +59,8 @@ class Shader {
     bool checkExpired() const;
     bool checkExpiredWithReset();
 
-    bool compile(const std::string &path, GLuint type);
     bool compile(const std::string &path, GLuint type,
-                 const std::string &source);
+                 const std::string &source, time_t mTime);
 };
 
 enum UniformType {
@@ -145,7 +171,8 @@ class ShaderProgram {
     void setFragmentShaderPreSource(const std::string preSource) {
         this->fragmentShader.setPreSource(preSource);
     }
-    GLuint compile(const std::string &vsPath, const std::string &fsPath);
+
     GLuint compile(const std::string &vsPath, const std::string &fsPath,
-                   const std::string &vsSource, const std::string &fsSource);
+                   const std::string &vsSource, const std::string &fsSource,
+                   time_t vsMTime, time_t fsMTime);
 };

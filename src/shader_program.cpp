@@ -15,22 +15,22 @@ void Shader::reset() {
         glDeleteShader(shader);
     }
 
+    errors.clear();
     type = 0;
     shader = 0;
     path = "(empty)";
     source = "";
     preSource = "";
-    error = "";
     ok = false;
 
     mTime = 0;
 }
 
 bool Shader::compile(const std::string &path, GLuint type,
-                     const std::string &source) {
+                     const std::string &source, time_t mTime) {
     this->type = type;
     this->path = path;
-    this->mTime = getMTime(path);
+    this->mTime = mTime;
     this->source = source;
 
     std::string combinedSource;
@@ -43,26 +43,23 @@ bool Shader::compile(const std::string &path, GLuint type,
     glShaderSource(shader, 1, &pCombinedSource, NULL);
     glCompileShader(shader);
 
+    std::string error;
+
     if (!checkCompiled(shader, error)) {
+        parseErrors(error);
         shader = 0;
         return false;
     }
+
+    errors.clear();
 
     ok = true;
 
     return true;
 }
 
-bool Shader::compile(const std::string &path, GLuint type) {
-    char *source = nullptr;
-    readText(path, source, mTime);
-    auto result = compile(path, type, source);
-    delete[] source;
-    return result;
-}
-
 bool Shader::checkExpired() const {
-    auto mTime = getMTime(this->path.c_str());
+    auto mTime = getMTime(this->path);
     return mTime != this->mTime;
 }
 
@@ -273,76 +270,41 @@ bool ShaderProgram::checkExpiredWithReset() {
 }
 
 GLuint ShaderProgram::compile(const std::string &vsPath,
-                              const std::string &fsPath) {
-    if (program != 0) {
-        glDeleteProgram(program);
-        program = 0;
-    }
-
-    AppLog::getInstance().addLog("(%s, %s): compling started.\n",
-                                 vsPath.c_str(), fsPath.c_str());
-
-    auto t0 = glfwGetTime();
-
-    if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER)) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
-                                     vertexShader.getPath().c_str(),
-                                     vertexShader.getError().c_str());
-        return 0;
-    }
-
-    if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER)) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
-                                     fragmentShader.getPath().c_str(),
-                                     fragmentShader.getError().c_str());
-        return 0;
-    }
-
-    link();
-
-    if (!checkLinked(program, error)) {
-        AppLog::getInstance().addLog("Program linking failed:\n%s",
-                                     error.c_str());
-        return 0;
-    }
-
-    loadAttributes();
-    loadUniforms();
-
-    compileTime = glfwGetTime() - t0;
-    ok = true;
-
-    AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
-                                 vertexShader.getPath().c_str(),
-                                 fragmentShader.getPath().c_str(), compileTime);
-
-    return program;
-}
-
-GLuint ShaderProgram::compile(const std::string &vsPath,
                               const std::string &fsPath,
                               const std::string &vsSource,
-                              const std::string &fsSource) {
+                              const std::string &fsSource, time_t vsMTime,
+                              time_t fsMTime) {
     if (program != 0) {
         glDeleteProgram(program);
         program = 0;
     }
+
     AppLog::getInstance().addLog("(%s, %s): compling started.\n",
                                  vsPath.c_str(), fsPath.c_str());
 
     auto t0 = glfwGetTime();
 
-    if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER, vsSource)) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
-                                     vertexShader.getPath().c_str(),
-                                     vertexShader.getError().c_str());
+    if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER, vsSource,
+                              getMTime(vsPath))) {
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
+                                     vertexShader.getPath().c_str());
+        const auto &errors = vertexShader.getErrors();
+        for (auto iter = errors.begin(); errors.end() != iter; iter++) {
+            AppLog::getInstance().addLog("%04d: %s\n", iter->first,
+                                         iter->second.c_str());
+        }
         return 0;
     }
 
-    if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER, fsSource)) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n%s",
-                                     fragmentShader.getPath().c_str(),
-                                     fragmentShader.getError().c_str());
+    if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER, fsSource,
+                                getMTime(fsPath))) {
+        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
+                                     fragmentShader.getPath().c_str());
+        const auto &errors = fragmentShader.getErrors();
+        for (auto iter = errors.begin(); errors.end() != iter; iter++) {
+            AppLog::getInstance().addLog("%04d:%s\n", iter->first,
+                                         iter->second.c_str());
+        }
         return 0;
     }
 
