@@ -61,7 +61,9 @@ elseif(MSVC)
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
     add_dependencies(shader_editor glfw)
     target_link_libraries(shader_editor ${OPENGL_LIBRARIES} glfw)
-else(APPLE)
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
     # OpenGL
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIRS})
