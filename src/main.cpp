@@ -1,7 +1,6 @@
 #include <string>
 #include <iostream>
 #include <sstream>
-#include <regex>
 #include <algorithm>
 #include <memory>
 
@@ -787,7 +786,7 @@ int main(void) {
     glGenRenderbuffers(2, depthBuffers);
     glGenTextures(2, backBuffers);
 
-    updateFrameBuffersSize(windowWidth, windowHeight);
+    updateFrameBuffersSize(windowWidth / 2, windowHeight / 2);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);

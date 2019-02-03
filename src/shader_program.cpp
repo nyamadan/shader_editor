@@ -4,7 +4,31 @@
 #include "file_utils.hpp"
 #include "shader_program.hpp"
 
+#include <regex>
 #include <sstream>
+
+void Shader::parseErrors(const std::string &error) {
+    const auto preSourceLines =
+        static_cast<int>(std::count(preSource.begin(), preSource.end(), '\n'));
+#ifdef __EMSCRIPTEN__
+    const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
+#else
+    const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
+#endif
+    std::istringstream ss(error);
+    std::string line;
+    while (std::getline(ss, line)) {
+        std::smatch m;
+        std::regex_match(line, m, re);
+        if (m.size() == 3) {
+            const auto lineNumber =
+                std::atoi(m[1].str().c_str()) - preSourceLines;
+            const auto message = m[2].str();
+
+            errors.insert(std::make_pair(lineNumber, message));
+        }
+    }
+}
 
 void Shader::setPreSource(const std::string &preSource) {
     this->preSource = preSource;
@@ -302,7 +326,7 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
                                      fragmentShader.getPath().c_str());
         const auto &errors = fragmentShader.getErrors();
         for (auto iter = errors.begin(); errors.end() != iter; iter++) {
-            AppLog::getInstance().addLog("%04d:%s\n", iter->first,
+            AppLog::getInstance().addLog("%04d: %s\n", iter->first,
                                          iter->second.c_str());
         }
         return 0;

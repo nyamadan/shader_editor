@@ -32,8 +32,8 @@ include_directories(./imgui)
 include_directories(./ImGuiColorTextEdit)
 
 # stb
-include_directories(./stb)
 add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
+include_directories(./stb)
 
 if(EMSCRIPTEN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
