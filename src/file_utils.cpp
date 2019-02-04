@@ -12,9 +12,9 @@ bool readText(const std::string &path, std::string &memblock) {
 }
 
 void writeText(const std::string &path, const char *const memblock,
-               size_t size) {
+               uint32_t size) {
     FILE *fp;
-    int fd;
+    int32_t fd;
 
     fd = open(path.c_str(), O_WRONLY | O_BINARY);
     fp = fdopen(fd, "wb");
@@ -22,11 +22,11 @@ void writeText(const std::string &path, const char *const memblock,
     fclose(fp);
 }
 
-time_t getMTime(const std::string &path) {
-    auto fd = open(path.c_str(), O_RDONLY | O_BINARY);
+int64_t getMTime(const std::string &path) {
+    int32_t fd = open(path.c_str(), O_RDONLY | O_BINARY);
 
     struct stat st;
     fstat(fd, &st);
 
-    return static_cast<time_t>(st.st_mtime);
+    return static_cast<int64_t>(st.st_mtime);
 }

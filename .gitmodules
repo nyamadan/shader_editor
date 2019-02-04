@@ -10,9 +10,9 @@
 [submodule "gl3w"]
 	path = gl3w
 	url = https://github.com/skaslev/gl3w.git
-[submodule "stb"]
-	path = stb
-	url = git@github.com:nothings/stb.git
 [submodule "ImGuiColorTextEdit"]
 	path = ImGuiColorTextEdit
-	url = git@github.com:BalazsJako/ImGuiColorTextEdit.git
+	url = https://github.com/BalazsJako/ImGuiColorTextEdit.git
+[submodule "stb"]
+	path = stb
+	url = https://github.com/nothings/stb.git

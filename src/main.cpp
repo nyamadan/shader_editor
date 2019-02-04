@@ -30,11 +30,11 @@ const char *const ShaderToyPreSourceName = "pre_shadertoy.glsl";
 
 std::string assetPath;
 
-int windowWidth = 1024;
-int windowHeight = 768;
+int32_t windowWidth = 1024;
+int32_t windowHeight = 768;
 
-int bufferWidth;
-int bufferHeight;
+int32_t bufferWidth;
+int32_t bufferHeight;
 
 GLFWwindow *mainWindow = nullptr;
 
@@ -47,8 +47,8 @@ std::string shaderToyPreSource;
 std::unique_ptr<ShaderProgram> program;
 ShaderProgram copyProgram;
 
-int writeBufferIndex = 0;
-int readBufferIndex = 1;
+int32_t writeBufferIndex = 0;
+int32_t readBufferIndex = 1;
 GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
@@ -57,12 +57,12 @@ const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
 
-time_t lastMTimeVS = 0;
-time_t lastMTimeFS = 0;
+int64_t lastMTimeVS = 0;
+int64_t lastMTimeFS = 0;
 
 uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
-time_t currentFrame = 0;
+int64_t currentFrame = 0;
 bool isRecording = false;
 FILE *fVideo;
 
@@ -79,8 +79,8 @@ void glfwErrorCallback(int error, const char *description) {
 
 void compileShaderFromFile(ShaderProgram &program, const std::string &vsPath,
                            const std::string &fsPath) {
-    const auto vsTime = getMTime(vsPath);
-    const auto fsTime = getMTime(fsPath);
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
     std::string vsSource;
     std::string fsSource;
     readText(vsPath, vsSource);
@@ -91,20 +91,20 @@ void compileShaderFromFile(ShaderProgram &program, const std::string &vsPath,
 void recompileFragmentShader(const ShaderProgram &program,
                              ShaderProgram &newProgram,
                              const std::string &fsSource) {
-    const auto &vsPath = program.getVertexShader().getPath();
-    const auto &fsPath = program.getFragmentShader().getPath();
-    const auto vsTime = getMTime(vsPath);
-    const auto fsTime = getMTime(fsPath);
-    const auto &vsSource = program.getVertexShader().getSource();
+    const std::string &vsPath = program.getVertexShader().getPath();
+    const std::string &fsPath = program.getFragmentShader().getPath();
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
+    const std::string &vsSource = program.getVertexShader().getSource();
     newProgram.compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
 void recompileShaderFromFile(const ShaderProgram &program,
                              ShaderProgram &newProgram) {
-    const auto &vsPath = program.getVertexShader().getPath();
-    const auto &fsPath = program.getFragmentShader().getPath();
-    const auto vsTime = getMTime(vsPath);
-    const auto fsTime = getMTime(fsPath);
+    const std::string &vsPath = program.getVertexShader().getPath();
+    const std::string &fsPath = program.getFragmentShader().getPath();
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
     std::string vsSource;
     std::string fsSource;
     readText(vsPath, vsSource);
@@ -116,7 +116,7 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
-    for (int i = 0; i < 2; i++) {
+    for (int32_t i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
 
         glBindRenderbuffer(GL_RENDERBUFFER, depthBuffers[i]);
@@ -158,9 +158,9 @@ void ShowTextEditor(bool &showTextEditor) {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Save")) {
-                const auto &textToSave = editor.GetText();
-                const auto buffer = textToSave.c_str();
-                const auto size = textToSave.size();
+                const std::string &textToSave = editor.GetText();
+                const char *const buffer = textToSave.c_str();
+                const uint32_t size = textToSave.size();
                 writeText(program->getFragmentShader().getPath(), buffer, size);
             }
 
@@ -171,7 +171,7 @@ void ShowTextEditor(bool &showTextEditor) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            auto ro = editor.IsReadOnly();
+            bool ro = editor.IsReadOnly();
             if (ImGui::MenuItem("Read-only mode", nullptr, &ro))
                 editor.SetReadOnly(ro);
             ImGui::Separator();
@@ -338,8 +338,8 @@ void update(void *) {
     glfwMakeContextCurrent(mainWindow);
     glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
 
-    const auto mouseDown = ImGui::GetIO().MouseDown;
-    const auto mousePos = ImGui::GetMousePos();
+    const bool *const mouseDown = ImGui::GetIO().MouseDown;
+    const ImVec2 &mousePos = ImGui::GetMousePos();
 
     // onResizeWindow
     if (!isRecording &&
@@ -558,7 +558,7 @@ void update(void *) {
                         ImGui::CloseCurrentPopup();
                     }
                 } else {
-                    auto value = uiTimeValue / uiVideoTime;
+                    float value = uiTimeValue / uiVideoTime;
                     ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
                 }
 
@@ -628,9 +628,9 @@ void update(void *) {
 
         for (int x = 0; x < bufferWidth; x++) {
             for (int y = 0; y < bufferHeight; y++) {
-                const int i = y * bufferWidth + x;
-                const int j = i * 4;
-                const int size = bufferWidth * bufferHeight;
+                const int32_t i = y * bufferWidth + x;
+                const int32_t j = i * 4;
+                const int32_t size = bufferWidth * bufferHeight;
                 const uint8_t R = rgbaBuffer[j + 0];
                 const uint8_t G = rgbaBuffer[j + 1];
                 const uint8_t B = rgbaBuffer[j + 2];

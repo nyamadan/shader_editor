@@ -15,7 +15,7 @@ class Shader {
     std::string preSource = "";
     std::map<int, std::string> errors;
     bool ok = false;
-    time_t mTime = 0;
+    int64_t mTime = 0;
 
     void parseErrors(const std::string &error);
 
@@ -35,7 +35,7 @@ class Shader {
     bool checkExpiredWithReset();
 
     bool compile(const std::string &path, GLuint type,
-                 const std::string &source, time_t mTime);
+                 const std::string &source, int64_t mTime);
 };
 
 enum UniformType {
@@ -49,7 +49,7 @@ enum UniformType {
 };
 
 union ShaderUniformValue {
-    int i;
+    int32_t i;
     float f;
     glm::vec1 vec1;
     glm::vec2 vec2;
@@ -121,7 +121,7 @@ class ShaderProgram {
     void setUniformValue(const std::string &name, const glm::vec3 &value);
     void setUniformValue(const std::string &name, const glm::vec4 &value);
     void setUniformValue(const std::string &name, float value);
-    void setUniformValue(const std::string &name, int value);
+    void setUniformValue(const std::string &name, int32_t value);
 
     void copyUniformsFrom(const ShaderProgram &program);
     void copyAttributesFrom(const ShaderProgram &program);
@@ -149,5 +149,5 @@ class ShaderProgram {
 
     GLuint compile(const std::string &vsPath, const std::string &fsPath,
                    const std::string &vsSource, const std::string &fsSource,
-                   time_t vsMTime, time_t fsMTime);
+                   int64_t vsMTime, int64_t fsMTime);
 };

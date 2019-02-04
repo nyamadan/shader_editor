@@ -10,7 +10,9 @@
 #include <io.h>
 #define open _open
 #define fdopen _fdopen
-#else
+#endif
+
+#ifndef O_BINARY
 #define O_BINARY 0x0000
 #endif
 

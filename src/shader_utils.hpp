@@ -4,8 +4,8 @@
 
 extern const char* const GlslVersion;
 
-int checkLinked(unsigned int program);
-int checkLinked(unsigned int program, std::string& error);
+GLint checkLinked(GLuint program);
+GLint checkLinked(GLuint program, std::string& error);
 
-int checkCompiled(unsigned int shader);
-int checkCompiled(unsigned int shader, std::string& error);
+GLint checkCompiled(GLuint shader);
+GLint checkCompiled(GLuint shader, std::string& error);

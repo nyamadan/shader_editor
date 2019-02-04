@@ -10,13 +10,13 @@ const char *const GlslVersion = "#version 300 es\n";
 const char *const GlslVersion = "#version 330 core\n";
 #endif
 
-int checkLinked(unsigned int program) {
+GLint checkLinked(GLuint program) {
     GLint success = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &success);
     return success;
 }
 
-int checkLinked(unsigned int program, std::string &error) {
+GLint checkLinked(GLuint program, std::string &error) {
     GLint success = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &success);
 
@@ -35,13 +35,13 @@ int checkLinked(unsigned int program, std::string &error) {
     return success;
 }
 
-int checkCompiled(unsigned int shader) {
+GLint checkCompiled(GLuint shader) {
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     return success;
 };
 
-int checkCompiled(unsigned int shader, std::string &error) {
+GLint checkCompiled(GLuint shader, std::string &error) {
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 
