@@ -115,6 +115,8 @@ class ShaderProgram {
     void applyAttribute(const std::string &name);
     void applyAttributes();
 
+    const bool containsUniform(const std::string &name) const;
+    const ShaderUniform &getUniform(const std::string &name) const;
     void setUniformValue(const std::string &name,
                          const ShaderUniformValue &value);
     void setUniformValue(const std::string &name, const glm::vec2 &value);

@@ -20,6 +20,11 @@
 #include "shader_program.hpp"
 #include "app_log.hpp"
 
+#ifdef WIN32
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 namespace {
 
 const char *const DefaultAssetPath = "default";
@@ -160,7 +165,7 @@ void ShowTextEditor(bool &showTextEditor) {
             if (ImGui::MenuItem("Save")) {
                 const std::string &textToSave = editor.GetText();
                 const char *const buffer = textToSave.c_str();
-                const uint32_t size = textToSave.size();
+                const int64_t size = textToSave.size();
                 writeText(program->getFragmentShader().getPath(), buffer, size);
             }
 
@@ -286,11 +291,13 @@ void update(void *) {
     const char *uResolutionName = nullptr;
     const char *uTimeName = nullptr;
     const char *uFrameName = nullptr;
+    const char *uBackbuffer = nullptr;
     switch (uiPlatform) {
         case 0:
             uTimeName = "time";
             uResolutionName = "resolution";
             uMouseName = "mouse";
+            uBackbuffer = "backbuffer";
             uFrameName = "";
             break;
         case 1:
@@ -298,6 +305,7 @@ void update(void *) {
             uResolutionName = "iResolution";
             uMouseName = "iMouse";
             uFrameName = "iFrame";
+            uBackbuffer = "";
             break;
     }
 
@@ -331,12 +339,12 @@ void update(void *) {
         editor.SetErrorMarkers(newProgram->getFragmentShader().getErrors());
     }
 
+    glfwMakeContextCurrent(mainWindow);
+    glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
+
     if (newProgram->isOK()) {
         swapProgram(newProgram);
     }
-
-    glfwMakeContextCurrent(mainWindow);
-    glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
 
     const bool *const mouseDown = ImGui::GetIO().MouseDown;
     const ImVec2 &mousePos = ImGui::GetMousePos();
@@ -388,6 +396,21 @@ void update(void *) {
                     swapProgram(newProgram);
                 }
             }
+
+#ifdef WIN32
+            if (ImGui::Button("Open")) {
+                OPENFILENAME ofn;
+                char szFile[MAX_PATH] = "";
+                ZeroMemory(&ofn, sizeof(ofn));
+                ofn.lStructSize = sizeof(OPENFILENAME);
+                ofn.lpstrFilter = TEXT("GLSL (*.glsl)\0*.glsl\0");
+                ofn.lpstrFile = szFile;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.Flags = OFN_FILEMUSTEXIST;
+
+                GetOpenFileName(&ofn);
+            }
+#endif
         }
 
         if (ImGui::CollapsingHeader("Stats")) {
@@ -594,6 +617,7 @@ void update(void *) {
     glUseProgram(program->getProgram());
 
     // uniform values
+    program->setUniformValue(uBackbuffer, 0);
     program->setUniformValue(uResolutionName,
                              glm::vec2(static_cast<GLfloat>(bufferWidth),
                                        static_cast<GLfloat>(bufferHeight)));
@@ -612,12 +636,23 @@ void update(void *) {
                     uMouseName, glm::vec4(mousePos.x, windowHeight - mousePos.y,
                                           mouseDown[0] ? 1.0f : 0.0f,
                                           mouseDown[1] ? 1.0f : 0.0f));
+            } else {
+                if (program->containsUniform(uMouseName)) {
+                    const glm::vec4 &prevMousePos =
+                        program->getUniform(uMouseName).value.vec4;
+                    program->setUniformValue(
+                        uMouseName,
+                        glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
+                }
             }
             break;
     }
 
     program->setUniformValue(uTimeName, uiTimeValue);
     program->applyUniforms();
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
 
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);

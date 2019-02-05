@@ -95,7 +95,7 @@ void AppLog::draw(const char* title, bool* p_open) {
     ImGui::End();
 }
 
-void AppLog::showAppLogWindow(bool &open) {
+void AppLog::showAppLogWindow(bool& open) {
     const char* const Title = "Log";
     ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
     this->draw(Title, &open);

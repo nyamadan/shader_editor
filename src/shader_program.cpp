@@ -201,6 +201,15 @@ void ShaderProgram::setUniformValue(const std::string &name,
     this->setUniformVector4(name, value);
 }
 
+const bool ShaderProgram::containsUniform(const std::string &name) const {
+    return uniforms.count(name) != 0;
+}
+
+const ShaderUniform &ShaderProgram::getUniform(const std::string &name) const {
+    const ShaderUniform &u = uniforms.at(name);
+    return u;
+}
+
 void ShaderProgram::setUniformValue(const std::string &name,
                                     const ShaderUniformValue &value) {
     ShaderUniform &u = uniforms[name];
