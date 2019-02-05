@@ -25,6 +25,10 @@ void writeText(const std::string &path, const char *const memblock,
 int64_t getMTime(const std::string &path) {
     int32_t fd = open(path.c_str(), O_RDONLY | O_BINARY);
 
+    if (fd < 0) {
+        return -1;
+    }
+
     struct stat st;
     fstat(fd, &st);
 

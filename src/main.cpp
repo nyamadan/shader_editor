@@ -20,7 +20,7 @@
 #include "shader_program.hpp"
 #include "app_log.hpp"
 
-#ifdef WIN32
+#if defined(WIN32)
 #include <windows.h>
 #include <commdlg.h>
 #endif
@@ -309,7 +309,8 @@ void update(void *) {
             break;
     }
 
-    auto newProgram = std::make_unique<ShaderProgram>();
+    std::unique_ptr<ShaderProgram> newProgram =
+        std::make_unique<ShaderProgram>();
 
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
@@ -397,7 +398,7 @@ void update(void *) {
                 }
             }
 
-#ifdef WIN32
+#if defined(WIN32)
             if (ImGui::Button("Open")) {
                 OPENFILENAME ofn;
                 char szFile[MAX_PATH] = "";
@@ -408,7 +409,28 @@ void update(void *) {
                 ofn.nMaxFile = MAX_PATH;
                 ofn.Flags = OFN_FILEMUSTEXIST;
 
-                GetOpenFileName(&ofn);
+                TCHAR cwd[256];
+                GetCurrentDirectory(sizeof(cwd), cwd);
+                bool result = GetOpenFileName(&ofn);
+                SetCurrentDirectory(cwd);
+
+                if (result) {
+                    std::unique_ptr<ShaderProgram> newProgram =
+                        std::make_unique<ShaderProgram>();
+
+                    if (uiPlatform == 1) {
+                        newProgram->setFragmentShaderPreSource(
+                            shaderToyPreSource);
+                    }
+                    compileShaderFromFile(*newProgram,
+                                          program->getVertexShader().getPath(),
+                                          szFile);
+                    editor.SetErrorMarkers(
+                        newProgram->getFragmentShader().getErrors());
+
+                    editor.SetText(newProgram->getFragmentShader().getSource());
+                    program.swap(newProgram);
+                }
             }
 #endif
         }
