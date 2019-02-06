@@ -50,12 +50,48 @@ void Shader::reset() {
     mTime = 0;
 }
 
-bool Shader::compile(const std::string &path, GLuint type,
-                     const std::string &source, int64_t mTime) {
+void Shader::setCompileInfo(const std::string &path, GLuint type,
+                            const std::string &source, int64_t mTime) {
     this->type = type;
     this->path = path;
     this->mTime = mTime;
     this->source = source;
+}
+
+bool Shader::compile() {
+    if (shader != 0) {
+        glDeleteShader(shader);
+        shader = 0;
+    }
+
+    std::string combinedSource;
+
+    combinedSource.append(preSource);
+    combinedSource.append(source);
+
+    shader = glCreateShader(type);
+    const char *const pCombinedSource = combinedSource.c_str();
+    glShaderSource(shader, 1, &pCombinedSource, NULL);
+    glCompileShader(shader);
+
+    std::string error;
+
+    if (!checkCompiled(shader, error)) {
+        parseErrors(error);
+        shader = 0;
+        return false;
+    }
+
+    errors.clear();
+
+    ok = true;
+
+    return true;
+}
+
+bool Shader::compile(const std::string &path, GLuint type,
+                     const std::string &source, int64_t mTime) {
+    setCompileInfo(path, type, source, mTime);
 
     std::string combinedSource;
 
@@ -302,23 +338,29 @@ bool ShaderProgram::checkExpiredWithReset() {
     return expiredVS || expiredFS;
 }
 
-GLuint ShaderProgram::compile(const std::string &vsPath,
-                              const std::string &fsPath,
-                              const std::string &vsSource,
-                              const std::string &fsSource, int64_t vsMTime,
-                              int64_t fsMTime) {
+void ShaderProgram::setCompileInfo(const std::string &vsPath,
+                                   const std::string &fsPath,
+                                   const std::string &vsSource,
+                                   const std::string &fsSource, int64_t vsMTime,
+                                   int64_t fsMTime) {
+    vertexShader.setCompileInfo(vsPath, GL_VERTEX_SHADER, vsSource, vsMTime);
+    fragmentShader.setCompileInfo(fsPath, GL_FRAGMENT_SHADER, fsSource,
+                                  fsMTime);
+}
+
+GLuint ShaderProgram::compile() {
     if (program != 0) {
         glDeleteProgram(program);
         program = 0;
     }
 
     AppLog::getInstance().addLog("(%s, %s): compling started.\n",
-                                 vsPath.c_str(), fsPath.c_str());
+                                 vertexShader.getPath().c_str(),
+                                 fragmentShader.getPath().c_str());
 
     double t0 = glfwGetTime();
 
-    if (!vertexShader.compile(vsPath, GL_VERTEX_SHADER, vsSource,
-                              getMTime(vsPath))) {
+    if (!vertexShader.compile()) {
         AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
                                      vertexShader.getPath().c_str());
         const auto &errors = vertexShader.getErrors();
@@ -329,8 +371,7 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
         return 0;
     }
 
-    if (!fragmentShader.compile(fsPath, GL_FRAGMENT_SHADER, fsSource,
-                                getMTime(fsPath))) {
+    if (!fragmentShader.compile()) {
         AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
                                      fragmentShader.getPath().c_str());
         const auto &errors = fragmentShader.getErrors();
@@ -360,6 +401,15 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
                                  fragmentShader.getPath().c_str(), compileTime);
 
     return program;
+}
+
+GLuint ShaderProgram::compile(const std::string &vsPath,
+                              const std::string &fsPath,
+                              const std::string &vsSource,
+                              const std::string &fsSource, int64_t vsMTime,
+                              int64_t fsMTime) {
+    this->setCompileInfo(vsPath, fsPath, vsSource, fsSource, vsMTime, fsMTime);
+    return this->compile();
 }
 
 void ShaderProgram::loadUniforms() {

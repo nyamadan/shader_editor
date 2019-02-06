@@ -34,6 +34,9 @@ class Shader {
     bool checkExpired() const;
     bool checkExpiredWithReset();
 
+    void setCompileInfo(const std::string &path, GLuint type,
+                        const std::string &source, int64_t mTime);
+    bool compile();
     bool compile(const std::string &path, GLuint type,
                  const std::string &source, int64_t mTime);
 };
@@ -149,6 +152,11 @@ class ShaderProgram {
         this->fragmentShader.setPreSource(preSource);
     }
 
+    void setCompileInfo(const std::string &vsPath, const std::string &fsPath,
+                        const std::string &vsSource,
+                        const std::string &fsSource, int64_t vsMTime,
+                        int64_t fsMTime);
+    GLuint compile();
     GLuint compile(const std::string &vsPath, const std::string &fsPath,
                    const std::string &vsSource, const std::string &fsSource,
                    int64_t vsMTime, int64_t fsMTime);

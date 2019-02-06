@@ -422,13 +422,26 @@ void update(void *) {
                         newProgram->setFragmentShaderPreSource(
                             shaderToyPreSource);
                     }
-                    compileShaderFromFile(*newProgram,
-                                          program->getVertexShader().getPath(),
-                                          szFile);
-                    editor.SetErrorMarkers(
-                        newProgram->getFragmentShader().getErrors());
 
-                    editor.SetText(newProgram->getFragmentShader().getSource());
+                    if (showTextEditor) {
+                        int64_t vsMTime = getMTime(program->getVertexShader().getPath());
+                        int64_t fsMTime = getMTime(szFile);
+
+                        std::string vsSource;
+                        readText(program->getVertexShader().getPath(), vsSource);
+                        std::string fsSource;
+                        readText(szFile, fsSource);
+
+                        editor.SetText(fsSource);
+                    } else {
+                        compileShaderFromFile(
+                            *newProgram, program->getVertexShader().getPath(),
+                            szFile);
+                        editor.SetText(newProgram->getFragmentShader().getSource());
+                        editor.SetErrorMarkers(
+                            newProgram->getFragmentShader().getErrors());
+                    }
+
                     program.swap(newProgram);
                 }
             }
@@ -636,8 +649,6 @@ void update(void *) {
     glViewport(0, 0, bufferWidth, bufferHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(program->getProgram());
-
     // uniform values
     program->setUniformValue(uBackbuffer, 0);
     program->setUniformValue(uResolutionName,
@@ -671,13 +682,18 @@ void update(void *) {
     }
 
     program->setUniformValue(uTimeName, uiTimeValue);
-    program->applyUniforms();
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+    if (program->isOK()) {
+        glUseProgram(program->getProgram());
 
-    glBindVertexArray(vertexArraysObject);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+        program->applyUniforms();
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+
+        glBindVertexArray(vertexArraysObject);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+    }
 
     if (isRecording) {
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
