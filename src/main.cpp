@@ -16,14 +16,10 @@
 
 #include "common.hpp"
 #include "file_utils.hpp"
+#include "platform.hpp"
 #include "shader_utils.hpp"
 #include "shader_program.hpp"
 #include "app_log.hpp"
-
-#if defined(WIN32)
-#include <windows.h>
-#include <commdlg.h>
-#endif
 
 namespace {
 
@@ -400,21 +396,9 @@ void update(void *) {
 
 #if defined(WIN32)
             if (ImGui::Button("Open")) {
-                OPENFILENAME ofn;
-                char szFile[MAX_PATH] = "";
-                ZeroMemory(&ofn, sizeof(ofn));
-                ofn.lStructSize = sizeof(OPENFILENAME);
-                ofn.lpstrFilter = TEXT("GLSL (*.glsl)\0*.glsl\0");
-                ofn.lpstrFile = szFile;
-                ofn.nMaxFile = MAX_PATH;
-                ofn.Flags = OFN_FILEMUSTEXIST;
+                std::string path;
 
-                TCHAR cwd[256];
-                GetCurrentDirectory(sizeof(cwd), cwd);
-                bool result = GetOpenFileName(&ofn);
-                SetCurrentDirectory(cwd);
-
-                if (result) {
+                if (openFileDialog(path, "Shader file (*.glsl)\0*.glsl\0")) {
                     std::unique_ptr<ShaderProgram> newProgram =
                         std::make_unique<ShaderProgram>();
 
@@ -423,24 +407,12 @@ void update(void *) {
                             shaderToyPreSource);
                     }
 
-                    if (showTextEditor) {
-                        int64_t vsMTime = getMTime(program->getVertexShader().getPath());
-                        int64_t fsMTime = getMTime(szFile);
-
-                        std::string vsSource;
-                        readText(program->getVertexShader().getPath(), vsSource);
-                        std::string fsSource;
-                        readText(szFile, fsSource);
-
-                        editor.SetText(fsSource);
-                    } else {
-                        compileShaderFromFile(
-                            *newProgram, program->getVertexShader().getPath(),
-                            szFile);
-                        editor.SetText(newProgram->getFragmentShader().getSource());
-                        editor.SetErrorMarkers(
-                            newProgram->getFragmentShader().getErrors());
-                    }
+                    compileShaderFromFile(*newProgram,
+                                          program->getVertexShader().getPath(),
+                                          path);
+                    editor.SetText(newProgram->getFragmentShader().getSource());
+                    editor.SetErrorMarkers(
+                        newProgram->getFragmentShader().getErrors());
 
                     program.swap(newProgram);
                 }
@@ -770,6 +742,12 @@ void update(void *) {
 }  // namespace
 
 int main(void) {
+    AppLog::getInstance().addLog("Assets:\n");
+    std::vector<std::string> files = openDir("./assets/");
+    for (auto iter = files.begin(); iter != files.end(); iter++) {
+        AppLog::getInstance().addLog("%s\n", iter->c_str());
+    }
+
     std::string vertexShaderPath = DefaultAssetPath;
     std::string fragmentShaderPath = DefaultAssetPath;
     std::string shaderToyPreSourcePath = DefaultAssetPath;
