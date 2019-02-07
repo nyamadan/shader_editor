@@ -236,7 +236,7 @@ void ShowTextEditor(bool &showTextEditor) {
 
 void appendPath(std::string &base, const std::string &path) {
     std::string vertexShaderPath = DefaultAssetPath;
-#ifdef WIN32
+#if defined(__MSVC__) || defined(__MINGW32__)
     if (base.back() != '\\' && base.back() != '/') {
         base.append("\\");
     }
@@ -394,7 +394,7 @@ void update(void *) {
                 }
             }
 
-#if defined(WIN32)
+#if defined(__MSVC__) || defined(__MINGW32__)
             if (ImGui::Button("Open")) {
                 std::string path;
 

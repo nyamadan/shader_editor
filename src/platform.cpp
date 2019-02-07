@@ -1,11 +1,11 @@
 #include "platform.hpp"
 
-#ifdef WIN32
+#if defined(__MSVC__) || defined(__MINGW32__)
 #include <windows.h>
 #include <commdlg.h>
 #endif
 
-#ifdef WIN32
+#if defined(__MSVC__) || defined(__MINGW32__)
 bool openFileDialog(std::string &path, const char *const filter) {
     OPENFILENAMEA ofn;
     char szFile[MAX_PATH] = "";
@@ -28,5 +28,5 @@ bool openFileDialog(std::string &path, const char *const filter) {
     return result;
 }
 #else
-bool openFileDialog(std::string &path, std::string &filter) { return false; }
+bool openFileDialog(std::string &path, const char * const filter) { return false; }
 #endif
