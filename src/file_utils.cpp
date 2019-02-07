@@ -3,7 +3,7 @@
 
 #include <fstream>
 #include <streambuf>
-#include <vector>
+#include <algorithm>
 
 #ifndef WIN32
 #include <dirent.h>
@@ -11,10 +11,20 @@
 #include <sys/stat.h>
 #endif
 
-std::vector<std::string> openDir(const std::string &path) {
-#ifdef WIN32
+std::vector<std::string> openDir(std::string path) {
     std::vector<std::string> files;
 
+#if defined(WIN32) || defined(__MINGW32__)
+    if (path.back() != '\\' && path.back() != '/') {
+        path.append("\\");
+    }
+#else
+    if (path.back() != '/') {
+        path.append("/");
+    }
+#endif
+
+#ifdef WIN32
     HANDLE hFind;
     WIN32_FIND_DATA win32fd;
 
@@ -32,11 +42,7 @@ std::vector<std::string> openDir(const std::string &path) {
         }
 
     } while (FindNextFileA(hFind, &win32fd));
-
-    return std::move(files);
 #else
-    std::vector<std::string> files;
-
     const char *const dir = path.c_str();
     DIR *dp;
     struct dirent *entry;
@@ -55,8 +61,35 @@ std::vector<std::string> openDir(const std::string &path) {
     }
     closedir(dp);
 
-    return std::move(files);
 #endif
+
+    return std::move(files);
+}
+
+std::string getExtention(const std::string &path) {
+    int64_t iExt = path.find_last_of(".");
+
+    if (iExt <= 0) {
+        return std::move(std::string());
+    }
+
+    std::string ext = path.substr(iExt, path.size() - iExt);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    return std::move(ext);
+}
+
+void appendPath(std::string &base, const std::string &path) {
+#if defined(WIN32) || defined(__MINGW32__)
+    if (base.back() != '\\' && base.back() != '/') {
+        base.append("\\");
+    }
+#else
+    if (base.back() != '/') {
+        base.append("/");
+    }
+#endif
+    base.append(path);
 }
 
 bool readText(const std::string &path, std::string &memblock) {

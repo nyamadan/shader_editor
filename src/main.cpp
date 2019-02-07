@@ -20,6 +20,7 @@
 #include "shader_utils.hpp"
 #include "shader_program.hpp"
 #include "app_log.hpp"
+#include "image.hpp"
 
 namespace {
 
@@ -58,14 +59,14 @@ const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
 
-int64_t lastMTimeVS = 0;
-int64_t lastMTimeFS = 0;
-
 uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 int64_t currentFrame = 0;
 bool isRecording = false;
 FILE *fVideo;
+
+std::vector<std::unique_ptr<Image>> imageFiles;
+char **imageFileNames = nullptr;
 
 TextEditor editor;
 
@@ -234,20 +235,6 @@ void ShowTextEditor(bool &showTextEditor) {
     ImGui::End();
 }
 
-void appendPath(std::string &base, const std::string &path) {
-    std::string vertexShaderPath = DefaultAssetPath;
-#if defined(__MSVC__) || defined(__MINGW32__)
-    if (base.back() != '\\' && base.back() != '/') {
-        base.append("\\");
-    }
-#else
-    if (base.back() != '/') {
-        base.append("/");
-    }
-#endif
-    base.append(path);
-}
-
 void swapProgram(std::unique_ptr<ShaderProgram> &newProgram) {
     newProgram->copyAttributesFrom(*program);
     newProgram->copyUniformsFrom(*program);
@@ -288,6 +275,7 @@ void update(void *) {
     const char *uTimeName = nullptr;
     const char *uFrameName = nullptr;
     const char *uBackbuffer = nullptr;
+
     switch (uiPlatform) {
         case 0:
             uTimeName = "time";
@@ -394,7 +382,7 @@ void update(void *) {
                 }
             }
 
-#if defined(__MSVC__) || defined(__MINGW32__)
+#if defined(WIN32) || defined(__MINGW32__)
             if (ImGui::Button("Open")) {
                 std::string path;
 
@@ -454,8 +442,13 @@ void update(void *) {
                     case UniformType::Integer:
                         ImGui::DragInt(u.name.c_str(), &u.value.i);
                         break;
-                    case UniformType::Sampler2D:
-                        break;
+                    case UniformType::Sampler2D: {
+                        // TODO: load textures
+                        static int32_t uiImage0 = 0;
+                        if (ImGui::Combo(u.name.c_str(), &uiImage0,
+                                         imageFileNames, imageFiles.size())) {
+                        }
+                    } break;
                     case UniformType::Vector1:
                         break;
                     case UniformType::Vector2:
@@ -739,13 +732,37 @@ void update(void *) {
 
     glfwPollEvents();
 }
+
 }  // namespace
 
 int main(void) {
     AppLog::getInstance().addLog("Assets:\n");
-    std::vector<std::string> files = openDir("./assets/");
+    std::vector<std::string> files = openDir("./assets");
     for (auto iter = files.begin(); iter != files.end(); iter++) {
-        AppLog::getInstance().addLog("%s\n", iter->c_str());
+        std::string ext = getExtention(*iter);
+        AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
+
+        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
+            std::unique_ptr<Image> image = std::make_unique<Image>();
+            image->setPath(*iter, ext);
+            imageFiles.push_back(std::move(image));
+        }
+    }
+
+    imageFileNames = new char *[imageFiles.size()];
+    for (int64_t i = 0, size = imageFiles.size(); i < size; i++) {
+        std::unique_ptr<Image> &image = imageFiles[i];
+        const std::string &path = image->getPath();
+        const int64_t fileNameLength = path.size();
+        char *fileName = new char[fileNameLength + 1];
+        fileName[fileNameLength] = '\0';
+        image->getPath().copy(fileName, fileNameLength, 0);
+        imageFileNames[i] = fileName;
+    }
+
+    AppLog::getInstance().addLog("Images:\n");
+    for (int64_t i = 0, size = imageFiles.size(); i < size; i++) {
+        AppLog::getInstance().addLog("%s\n", imageFileNames[i]);
     }
 
     std::string vertexShaderPath = DefaultAssetPath;
@@ -854,6 +871,13 @@ int main(void) {
 
     while (!glfwWindowShouldClose(mainWindow)) {
         update(nullptr);
+    }
+
+    if (imageFileNames != nullptr) {
+        for (int64_t i = 0, size = imageFiles.size(); i < size; i++) {
+            delete[] imageFileNames[i];
+        }
+        delete[] imageFileNames;
     }
 
     glfwTerminate();

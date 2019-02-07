@@ -74,7 +74,7 @@ bool Shader::compile() {
     glShaderSource(shader, 1, &pCombinedSource, NULL);
     glCompileShader(shader);
 
-    std::string error;
+    std::string error = "";
 
     if (!checkCompiled(shader, error)) {
         parseErrors(error);
