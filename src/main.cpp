@@ -65,7 +65,8 @@ int64_t currentFrame = 0;
 bool isRecording = false;
 FILE *fVideo;
 
-std::vector<std::unique_ptr<Image>> imageFiles;
+std::vector<std::shared_ptr<Image>> imageFiles;
+int32_t numImageFiles = 0;
 char **imageFileNames = nullptr;
 
 TextEditor editor;
@@ -263,6 +264,7 @@ void update(void *) {
     static int uiBufferQuality = 2;
     static int uiVideoResolution = 2;
     static float uiVideoTime = 5.0f;
+    static std::map<std::string, int32_t> uiImages;
 
     int currentWidth, currentHeight;
     float bufferScale =
@@ -444,9 +446,14 @@ void update(void *) {
                         break;
                     case UniformType::Sampler2D: {
                         // TODO: load textures
-                        static int32_t uiImage0 = 0;
-                        if (ImGui::Combo(u.name.c_str(), &uiImage0,
-                                         imageFileNames, imageFiles.size())) {
+                        int32_t &uiImage = uiImages[u.name];
+
+                        if (uiImage < 0 || uiImage >= numImageFiles) {
+                            uiImage = 0;
+                        }
+
+                        if (ImGui::Combo(u.name.c_str(), &uiImage,
+                                         imageFileNames, numImageFiles)) {
                         }
                     } break;
                     case UniformType::Vector1:
@@ -733,25 +740,27 @@ void update(void *) {
     glfwPollEvents();
 }
 
-}  // namespace
-
-int main(void) {
+void loadImages(const std::string& path)
+{
     AppLog::getInstance().addLog("Assets:\n");
-    std::vector<std::string> files = openDir("./assets");
+
+    std::vector<std::string> files = openDir(path);
     for (auto iter = files.begin(); iter != files.end(); iter++) {
         std::string ext = getExtention(*iter);
         AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
 
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
-            std::unique_ptr<Image> image = std::make_unique<Image>();
+            std::shared_ptr<Image> image = std::make_shared<Image>();
             image->setPath(*iter, ext);
-            imageFiles.push_back(std::move(image));
+            imageFiles.push_back(image);
         }
     }
 
-    imageFileNames = new char *[imageFiles.size()];
-    for (int64_t i = 0, size = imageFiles.size(); i < size; i++) {
-        std::unique_ptr<Image> &image = imageFiles[i];
+    numImageFiles = imageFiles.size();
+
+    imageFileNames = new char *[numImageFiles];
+    for (int64_t i = 0, size = numImageFiles; i < size; i++) {
+        std::shared_ptr<Image> image = imageFiles[i];
         const std::string &path = image->getPath();
         const int64_t fileNameLength = path.size();
         char *fileName = new char[fileNameLength + 1];
@@ -765,16 +774,11 @@ int main(void) {
         AppLog::getInstance().addLog("%s\n", imageFileNames[i]);
     }
 
-    std::string vertexShaderPath = DefaultAssetPath;
-    std::string fragmentShaderPath = DefaultAssetPath;
-    std::string shaderToyPreSourcePath = DefaultAssetPath;
-    std::string copyFS = DefaultAssetPath;
+}
 
-    appendPath(vertexShaderPath, DefaultVertexShaderName);
-    appendPath(fragmentShaderPath, DefaultFragmentShaderName);
-    appendPath(copyFS, CopyFragmentShaderName);
-    appendPath(shaderToyPreSourcePath, ShaderToyPreSourceName);
+}  // namespace
 
+int main(void) {
     if (!glfwInit()) return -1;
 
     glfwSetErrorCallback(glfwErrorCallback);
@@ -820,6 +824,16 @@ int main(void) {
 
     glfwMakeContextCurrent(mainWindow);
 
+    std::string vertexShaderPath = DefaultAssetPath;
+    std::string fragmentShaderPath = DefaultAssetPath;
+    std::string shaderToyPreSourcePath = DefaultAssetPath;
+    std::string copyFS = DefaultAssetPath;
+
+    appendPath(vertexShaderPath, DefaultVertexShaderName);
+    appendPath(fragmentShaderPath, DefaultFragmentShaderName);
+    appendPath(copyFS, CopyFragmentShaderName);
+    appendPath(shaderToyPreSourcePath, ShaderToyPreSourceName);
+
     // load pre source
     readText(shaderToyPreSourcePath, shaderToyPreSource);
 
@@ -859,6 +873,8 @@ int main(void) {
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    loadImages("./assets");
 
     timeStart = static_cast<float>(ImGui::GetTime());
 
