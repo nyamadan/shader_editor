@@ -33,6 +33,7 @@ include_directories(./imgui)
 include_directories(./ImGuiColorTextEdit)
 
 # stb
+add_definitions(-DSTB_IMAGE_IMPLEMENTATION)
 add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
 include_directories(./stb)
 

@@ -5,7 +5,7 @@
 #include <streambuf>
 #include <algorithm>
 
-#ifndef WIN32
+#ifndef _MSC_VER
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -14,7 +14,7 @@
 std::vector<std::string> openDir(std::string path) {
     std::vector<std::string> files;
 
-#if defined(WIN32) || defined(__MINGW32__)
+#if defined(_MSC_VER) || defined(__MINGW32__)
     if (path.back() != '\\' && path.back() != '/') {
         path.append("\\");
     }
@@ -24,7 +24,7 @@ std::vector<std::string> openDir(std::string path) {
     }
 #endif
 
-#ifdef WIN32
+#ifdef _MSC_VER
     HANDLE hFind;
     WIN32_FIND_DATA win32fd;
 
@@ -80,7 +80,7 @@ std::string getExtention(const std::string &path) {
 }
 
 void appendPath(std::string &base, const std::string &path) {
-#if defined(WIN32) || defined(__MINGW32__)
+#if defined(_MSC_VER) || defined(__MINGW32__)
     if (base.back() != '\\' && base.back() != '/') {
         base.append("\\");
     }

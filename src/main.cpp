@@ -4,8 +4,6 @@
 #include <algorithm>
 #include <memory>
 
-#include <stb_image_write.h>
-
 #include <imgui.h>
 #include <examples/imgui_impl_glfw.h>
 #include <examples/imgui_impl_opengl3.h>
@@ -384,7 +382,7 @@ void update(void *) {
                 }
             }
 
-#if defined(WIN32) || defined(__MINGW32__)
+#if defined(_MSC_VER) || defined(__MINGW32__)
             if (ImGui::Button("Open")) {
                 std::string path;
 
@@ -751,7 +749,8 @@ void loadImages(const std::string& path)
 
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
             std::shared_ptr<Image> image = std::make_shared<Image>();
-            image->setPath(*iter, ext);
+            image->setPath(path, *iter, ext);
+            image->load();
             imageFiles.push_back(image);
         }
     }
@@ -761,11 +760,11 @@ void loadImages(const std::string& path)
     imageFileNames = new char *[numImageFiles];
     for (int64_t i = 0, size = numImageFiles; i < size; i++) {
         std::shared_ptr<Image> image = imageFiles[i];
-        const std::string &path = image->getPath();
+        const std::string &path = image->getName();
         const int64_t fileNameLength = path.size();
         char *fileName = new char[fileNameLength + 1];
         fileName[fileNameLength] = '\0';
-        image->getPath().copy(fileName, fileNameLength, 0);
+        image->getName().copy(fileName, fileNameLength, 0);
         imageFileNames[i] = fileName;
     }
 
