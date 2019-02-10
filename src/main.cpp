@@ -162,7 +162,8 @@ void ShowTextEditor(bool &showTextEditor) {
                 const std::string &textToSave = editor.GetText();
                 const char *const buffer = textToSave.c_str();
                 const int64_t size = textToSave.size();
-                writeText(program->getFragmentShader().getPath(), buffer, size);
+                writeText(program->getFragmentShader().getPath(), buffer,
+                          static_cast<int32_t>(size));
             }
 
             if (ImGui::MenuItem("Close")) {
@@ -248,6 +249,32 @@ void swapProgram(std::unique_ptr<ShaderProgram> &newProgram) {
     program.swap(newProgram);
 }
 
+void writeOneFrame() {
+    for (int32_t x = 0; x < bufferWidth; x++) {
+        for (int32_t y = 0; y < bufferHeight; y++) {
+            const int32_t i = y * bufferWidth + x;
+            const int32_t j = i * 4;
+            const int32_t size = bufferWidth * bufferHeight;
+            const uint8_t R = rgbaBuffer[j + 0];
+            const uint8_t G = rgbaBuffer[j + 1];
+            const uint8_t B = rgbaBuffer[j + 2];
+            const uint8_t Y =
+                static_cast<uint8_t>(0.299 * R + 0.587 * G + 0.114 * B);
+            const uint8_t U =
+                static_cast<uint8_t>(-0.169 * R - 0.331 * G + 0.5 * B + 128);
+            const uint8_t V =
+                static_cast<uint8_t>(0.5 * R - 0.419 * G - 0.081 * B + 128);
+
+            yuvBuffer[i] = Y;
+            yuvBuffer[i + size] = U;
+            yuvBuffer[i + size * 2] = V;
+        }
+    }
+
+    fputs("FRAME\n", fVideo);
+    fwrite(yuvBuffer, sizeof(uint8_t), bufferWidth * bufferHeight * 3, fVideo);
+}
+
 void update(void *) {
     // ImGUI
     static bool showImGuiDemoWindow = false;
@@ -264,6 +291,7 @@ void update(void *) {
     static float uiVideoTime = 5.0f;
     static std::map<std::string, int32_t> uiImages;
 
+    std::map<std::string, std::shared_ptr<Image>> usedTextures;
     int currentWidth, currentHeight;
     float bufferScale =
         1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
@@ -423,7 +451,8 @@ void update(void *) {
         if (ImGui::CollapsingHeader("Uniforms")) {
             auto &uniforms = program->getUniforms();
             for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-                auto &u = it->second;
+                const std::string &name = it->first;
+                ShaderUniform &u = it->second;
                 if (u.location < 0) {
                     continue;
                 }
@@ -443,7 +472,6 @@ void update(void *) {
                         ImGui::DragInt(u.name.c_str(), &u.value.i);
                         break;
                     case UniformType::Sampler2D: {
-                        // TODO: load textures
                         int32_t &uiImage = uiImages[u.name];
 
                         if (uiImage < 0 || uiImage >= numImageFiles) {
@@ -453,6 +481,8 @@ void update(void *) {
                         if (ImGui::Combo(u.name.c_str(), &uiImage,
                                          imageFileNames, numImageFiles)) {
                         }
+
+                        usedTextures[u.name] = imageFiles[uiImage];
                     } break;
                     case UniformType::Vector1:
                         break;
@@ -620,7 +650,6 @@ void update(void *) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // uniform values
-    program->setUniformValue(uBackbuffer, 0);
     program->setUniformValue(uResolutionName,
                              glm::vec2(static_cast<GLfloat>(bufferWidth),
                                        static_cast<GLfloat>(bufferHeight)));
@@ -656,10 +685,29 @@ void update(void *) {
     if (program->isOK()) {
         glUseProgram(program->getProgram());
 
-        program->applyUniforms();
+        int32_t channel = 0;
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+        program->setUniformValue(uBackbuffer, channel++);
+
+        for (auto iter = usedTextures.begin(); iter != usedTextures.end();
+             iter++) {
+            const std::string &name = iter->first;
+            std::shared_ptr<Image> image = iter->second;
+
+            if (!image->isLoaded()) {
+                image->load();
+            }
+
+            if (image->isLoaded()) {
+                glActiveTexture(GL_TEXTURE0 + channel);
+                glBindTexture(GL_TEXTURE_2D, image->getTexture());
+                program->setUniformValue(iter->first, channel++);
+            }
+        }
+
+        program->applyUniforms();
 
         glBindVertexArray(vertexArraysObject);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
@@ -669,30 +717,7 @@ void update(void *) {
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                      rgbaBuffer);
 
-        for (int x = 0; x < bufferWidth; x++) {
-            for (int y = 0; y < bufferHeight; y++) {
-                const int32_t i = y * bufferWidth + x;
-                const int32_t j = i * 4;
-                const int32_t size = bufferWidth * bufferHeight;
-                const uint8_t R = rgbaBuffer[j + 0];
-                const uint8_t G = rgbaBuffer[j + 1];
-                const uint8_t B = rgbaBuffer[j + 2];
-                const uint8_t Y =
-                    static_cast<uint8_t>(0.299 * R + 0.587 * G + 0.114 * B);
-                const uint8_t U = static_cast<uint8_t>(-0.169 * R - 0.331 * G +
-                                                       0.5 * B + 128);
-                const uint8_t V =
-                    static_cast<uint8_t>(0.5 * R - 0.419 * G - 0.081 * B + 128);
-
-                yuvBuffer[i] = Y;
-                yuvBuffer[i + size] = U;
-                yuvBuffer[i + size * 2] = V;
-            }
-        }
-
-        fputs("FRAME\n", fVideo);
-        fwrite(yuvBuffer, sizeof(uint8_t), bufferWidth * bufferHeight * 3,
-               fVideo);
+        writeOneFrame();
 
         currentFrame++;
 
@@ -738,8 +763,7 @@ void update(void *) {
     glfwPollEvents();
 }
 
-void loadImages(const std::string& path)
-{
+void loadImages(const std::string &path) {
     AppLog::getInstance().addLog("Assets:\n");
 
     std::vector<std::string> files = openDir(path);
@@ -750,12 +774,11 @@ void loadImages(const std::string& path)
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
             std::shared_ptr<Image> image = std::make_shared<Image>();
             image->setPath(path, *iter, ext);
-            image->load();
             imageFiles.push_back(image);
         }
     }
 
-    numImageFiles = imageFiles.size();
+    numImageFiles = static_cast<int32_t>(imageFiles.size());
 
     imageFileNames = new char *[numImageFiles];
     for (int64_t i = 0, size = numImageFiles; i < size; i++) {
@@ -773,14 +796,14 @@ void loadImages(const std::string& path)
         AppLog::getInstance().addLog("%s\n", imageFileNames[i]);
     }
 
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
-
 }  // namespace
 
 int main(void) {
-    if (!glfwInit()) return -1;
-
     glfwSetErrorCallback(glfwErrorCallback);
+
+    if (!glfwInit()) return -1;
 
 #ifdef __EMSCRIPTEN__
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);

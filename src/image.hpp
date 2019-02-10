@@ -15,6 +15,7 @@ class Image {
     int32_t width = 0;
     int32_t height = 0;
     int32_t channels = 0;
+    uint32_t textureId = 0;
     uint8_t *data = nullptr;
 
    public:
@@ -42,7 +43,26 @@ class Image {
         appendPath(this->path, this->name);
     }
 
-    void load() {
-        this->data = stbi_load(path.c_str(), &width, &height, &channels, 0);
+    bool load() {
+        uint8_t *data = stbi_load(path.c_str(), &width, &height, &channels, 0);
+        if (data == nullptr) {
+            return false;
+        }
+
+        this->data = data;
+
+        if (textureId == 0) {
+            glCreateTextures(GL_TEXTURE_2D, 1, &textureId);
+        }
+
+        glBindTexture(GL_TEXTURE_2D, textureId);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+                     GL_UNSIGNED_BYTE, this->data);
+
+        return true;
     }
+
+    bool isLoaded() const { return this->data != nullptr; }
+
+    uint32_t getTexture() const { return textureId; }
 };
