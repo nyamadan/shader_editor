@@ -276,8 +276,10 @@ void writeOneFrame() {
 }
 
 void update(void *) {
-    // ImGUI
+#ifdef _DEBUG
     static bool showImGuiDemoWindow = false;
+#endif
+
     static bool showDebugWindow = true;
     static bool showAppLogWindow = false;
     static bool showTextEditor = false;
@@ -494,10 +496,11 @@ void update(void *) {
 
                         if (ImGui::Combo(u.name.c_str(), &uiImage,
                                          imageFileNames, numImageFiles)) {
+                            usedTextures[u.name] = imageFiles[uiImage];
                         }
 
-                        usedTextures[u.name] = imageFiles[uiImage];
-                    } break;
+                        break;
+                    }
                     case UniformType::Vector1:
                         break;
                     case UniformType::Vector2:
@@ -641,7 +644,9 @@ void update(void *) {
         if (ImGui::CollapsingHeader("Window")) {
             ImGui::Checkbox("Log", &showAppLogWindow);
             ImGui::Checkbox("TextEditor", &showTextEditor);
+#ifdef _DEBUG
             ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
+#endif
         }
     }
 
@@ -653,9 +658,11 @@ void update(void *) {
         AppLog::getInstance().showAppLogWindow(showAppLogWindow);
     }
 
+#ifdef _DEBUG
     if (showImGuiDemoWindow) {
         ImGui::ShowDemoWindow(&showImGuiDemoWindow);
     }
+#endif
 
     ImGui::Render();
 

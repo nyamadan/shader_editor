@@ -58,7 +58,7 @@ class Image {
         this->data = data;
 
         if (textureId == 0) {
-            glCreateTextures(GL_TEXTURE_2D, 1, &this->textureId);
+            glGenTextures(1, &this->textureId);
         }
 
         glBindTexture(GL_TEXTURE_2D, textureId);
