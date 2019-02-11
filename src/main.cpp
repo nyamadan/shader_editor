@@ -388,7 +388,7 @@ void update(void *) {
     for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
         ShaderUniform &u = it->second;
 
-        if (u.type == UniformType::Sampler2D) {
+        if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
             usedTextures[u.name] = imageFiles[0];
 
             int32_t &uiImage = uiImages[u.name];
@@ -703,6 +703,7 @@ void update(void *) {
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+
         program->setUniformValue(uBackbuffer, channel++);
 
         for (auto iter = usedTextures.begin(); iter != usedTextures.end();
@@ -716,8 +717,7 @@ void update(void *) {
 
             if (image->isLoaded()) {
                 glActiveTexture(GL_TEXTURE0 + channel);
-                uint32_t textureId = image->getTexture();
-                glBindTexture(GL_TEXTURE_2D, textureId);
+                glBindTexture(GL_TEXTURE_2D, image->getTexture());
                 program->setUniformValue(iter->first, channel++);
             }
         }
@@ -747,6 +747,9 @@ void update(void *) {
         }
     }
 
+    // swap buffer
+    std::swap(writeBufferIndex, readBufferIndex);
+
     // copy to frontbuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, windowWidth, windowHeight);
@@ -754,7 +757,7 @@ void update(void *) {
     glUseProgram(copyProgram.getProgram());
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, backBuffers[writeBufferIndex]);
+    glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
 
     copyProgram.setUniformValue("backbuffer", 0);
     copyProgram.setUniformValue("resolution",
@@ -768,8 +771,6 @@ void update(void *) {
     glfwMakeContextCurrent(mainWindow);
 
     glfwSwapBuffers(mainWindow);
-
-    std::swap(writeBufferIndex, readBufferIndex);
 
     for (GLenum error = glGetError(); error; error = glGetError()) {
         AppLog::getInstance().addLog("error code: 0x%0X\n", error);
