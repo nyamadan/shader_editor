@@ -59,7 +59,7 @@ elseif(MSVC)
     add_subdirectory(./glfw)
     include_directories(./glfw/include)
 
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
     add_dependencies(shader_editor glfw)
     target_link_libraries(shader_editor ${OPENGL_LIBRARIES} glfw)
