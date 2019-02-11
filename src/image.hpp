@@ -25,6 +25,11 @@ class Image {
             stbi_image_free(data);
             data = nullptr;
         }
+
+        if (textureId != 0) {
+            glDeleteTextures(1, &textureId);
+            textureId = 0;
+        }
     }
     const std::string &getName() const { return name; }
 
@@ -44,6 +49,7 @@ class Image {
     }
 
     bool load() {
+        stbi_set_flip_vertically_on_load(1);
         uint8_t *data = stbi_load(path.c_str(), &width, &height, &channels, 0);
         if (data == nullptr) {
             return false;
@@ -52,17 +58,33 @@ class Image {
         this->data = data;
 
         if (textureId == 0) {
-            glCreateTextures(GL_TEXTURE_2D, 1, &textureId);
+            glCreateTextures(GL_TEXTURE_2D, 1, &this->textureId);
         }
 
         glBindTexture(GL_TEXTURE_2D, textureId);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
-                     GL_UNSIGNED_BYTE, this->data);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        switch (channels) {
+            case 3:
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+                             GL_UNSIGNED_BYTE, data);
+                break;
+            case 4:
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                             GL_RGBA, GL_UNSIGNED_BYTE, data);
+                break;
+            default:
+                AppLog::getInstance().addLog("Texture Channel Error: %d\n", channels);
+                break;
+        }
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
         return true;
     }
 
     bool isLoaded() const { return this->data != nullptr; }
 
-    uint32_t getTexture() const { return textureId; }
+    uint32_t getTexture() const { return this->textureId; }
 };

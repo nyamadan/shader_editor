@@ -364,7 +364,7 @@ void update(void *) {
 
     // onResizeWindow
     if (!isRecording &&
-        (currentWidth != bufferWidth || currentHeight != bufferHeight)) {
+        (currentWidth != windowWidth || currentHeight != windowHeight)) {
         updateFrameBuffersSize(static_cast<GLint>(currentWidth * bufferScale),
                                static_cast<GLint>(currentHeight * bufferScale));
     }
@@ -381,6 +381,23 @@ void update(void *) {
             uiTimeValue = uiTimeValue;
         } else {
             uiTimeValue = now - timeStart;
+        }
+    }
+
+    auto &uniforms = program->getUniforms();
+    for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
+        ShaderUniform &u = it->second;
+
+        if (u.type == UniformType::Sampler2D) {
+            usedTextures[u.name] = imageFiles[0];
+
+            int32_t &uiImage = uiImages[u.name];
+
+            if (uiImage < 0 || uiImage >= numImageFiles) {
+                uiImage = 0;
+            }
+
+            usedTextures[u.name] = imageFiles[uiImage];
         }
     }
 
@@ -458,7 +475,8 @@ void update(void *) {
                 }
 
                 if (u.name == uTimeName || u.name == uResolutionName ||
-                    u.name == uMouseName || u.name == uFrameName) {
+                    u.name == uMouseName || u.name == uFrameName ||
+                    u.name == uBackbuffer) {
                     ImGui::LabelText(u.name.c_str(), "%s",
                                      u.toString().c_str());
                     continue;
@@ -473,10 +491,6 @@ void update(void *) {
                         break;
                     case UniformType::Sampler2D: {
                         int32_t &uiImage = uiImages[u.name];
-
-                        if (uiImage < 0 || uiImage >= numImageFiles) {
-                            uiImage = 0;
-                        }
 
                         if (ImGui::Combo(u.name.c_str(), &uiImage,
                                          imageFileNames, numImageFiles)) {
@@ -702,7 +716,8 @@ void update(void *) {
 
             if (image->isLoaded()) {
                 glActiveTexture(GL_TEXTURE0 + channel);
-                glBindTexture(GL_TEXTURE_2D, image->getTexture());
+                uint32_t textureId = image->getTexture();
+                glBindTexture(GL_TEXTURE_2D, textureId);
                 program->setUniformValue(iter->first, channel++);
             }
         }
