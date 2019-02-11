@@ -31,7 +31,8 @@ class Image {
             textureId = 0;
         }
     }
-    const std::string &getName() const { return name; }
+
+    const std::string &getPath() const { return path; }
 
     void setPath(const std::string &base, const std::string &name) {
         std::string ext = getExtention(base);
@@ -62,6 +63,10 @@ class Image {
         }
 
         glBindTexture(GL_TEXTURE_2D, textureId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
         switch (channels) {
@@ -77,9 +82,6 @@ class Image {
                 AppLog::getInstance().addLog("Texture Channel Error: %d\n", channels);
                 break;
         }
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
         return true;
     }

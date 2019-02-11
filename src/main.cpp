@@ -67,6 +67,10 @@ std::vector<std::shared_ptr<Image>> imageFiles;
 int32_t numImageFiles = 0;
 char **imageFileNames = nullptr;
 
+std::vector<std::shared_ptr<ShaderProgram>> shaderFiles;
+int32_t numShaderFiles = 0;
+char **shaderFileNames = nullptr;
+
 TextEditor editor;
 
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
@@ -362,7 +366,8 @@ void update(void *) {
     }
 
     const bool *const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2 &mousePos = ImGui::GetMousePos();
+    const ImVec2 &mousePos =
+        ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
 
     // onResizeWindow
     if (!isRecording &&
@@ -386,20 +391,22 @@ void update(void *) {
         }
     }
 
-    auto &uniforms = program->getUniforms();
-    for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-        ShaderUniform &u = it->second;
+    usedTextures.clear();
 
-        if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
-            usedTextures[u.name] = imageFiles[0];
+    if (numImageFiles > 0) {
+        auto &uniforms = program->getUniforms();
+        for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
+            ShaderUniform &u = it->second;
 
-            int32_t &uiImage = uiImages[u.name];
+            if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
+                int32_t &uiImage = uiImages[u.name];
 
-            if (uiImage < 0 || uiImage >= numImageFiles) {
-                uiImage = 0;
+                if (uiImage < 0 || uiImage >= numImageFiles) {
+                    uiImage = 0;
+                }
+
+                usedTextures[u.name] = imageFiles[uiImage];
             }
-
-            usedTextures[u.name] = imageFiles[uiImage];
         }
     }
 
@@ -427,6 +434,12 @@ void update(void *) {
                 if (newProgram->isOK()) {
                     swapProgram(newProgram);
                 }
+            }
+
+            // TODO: Load Shader.
+            static int32_t uiShader;
+            if (ImGui::Combo("File", &uiShader, shaderFileNames,
+                             numShaderFiles)) {
             }
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
@@ -491,16 +504,16 @@ void update(void *) {
                     case UniformType::Integer:
                         ImGui::DragInt(u.name.c_str(), &u.value.i);
                         break;
-                    case UniformType::Sampler2D: {
-                        int32_t &uiImage = uiImages[u.name];
+                    case UniformType::Sampler2D:
+                        if (numImageFiles > 0) {
+                            int32_t &uiImage = uiImages[u.name];
 
-                        if (ImGui::Combo(u.name.c_str(), &uiImage,
-                                         imageFileNames, numImageFiles)) {
-                            usedTextures[u.name] = imageFiles[uiImage];
+                            if (ImGui::Combo(u.name.c_str(), &uiImage,
+                                             imageFileNames, numImageFiles)) {
+                                usedTextures[u.name] = imageFiles[uiImage];
+                            }
                         }
-
                         break;
-                    }
                     case UniformType::Vector1:
                         break;
                     case UniformType::Vector2:
@@ -708,11 +721,6 @@ void update(void *) {
 
         int32_t channel = 0;
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
-
-        program->setUniformValue(uBackbuffer, channel++);
-
         for (auto iter = usedTextures.begin(); iter != usedTextures.end();
              iter++) {
             const std::string &name = iter->first;
@@ -722,12 +730,14 @@ void update(void *) {
                 image->load();
             }
 
-            if (image->isLoaded()) {
-                glActiveTexture(GL_TEXTURE0 + channel);
-                glBindTexture(GL_TEXTURE_2D, image->getTexture());
-                program->setUniformValue(iter->first, channel++);
-            }
+            glActiveTexture(GL_TEXTURE0 + channel);
+            glBindTexture(GL_TEXTURE_2D, image->getTexture());
+            program->setUniformValue(iter->first, channel++);
         }
+
+        glActiveTexture(GL_TEXTURE0 + channel);
+        glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+        program->setUniformValue(uBackbuffer, channel++);
 
         program->applyUniforms();
 
@@ -786,7 +796,7 @@ void update(void *) {
     glfwPollEvents();
 }
 
-void loadImages(const std::string &path) {
+void loadFiles(const std::string &path) {
     AppLog::getInstance().addLog("Assets:\n");
 
     std::vector<std::string> files = openDir(path);
@@ -799,27 +809,62 @@ void loadImages(const std::string &path) {
             image->setPath(path, *iter, ext);
             imageFiles.push_back(image);
         }
+
+        if (ext == ".glsl" || ext == ".frag") {
+            std::shared_ptr<ShaderProgram> newProgram =
+                std::make_shared<ShaderProgram>();
+
+            std::string vertexShaderPath = DefaultAssetPath;
+            appendPath(vertexShaderPath, DefaultVertexShaderName);
+
+            std::string fragmentShaderPath = DefaultAssetPath;
+            appendPath(fragmentShaderPath, DefaultFragmentShaderName);
+
+            const int64_t vsTime = getMTime(vertexShaderPath);
+            const int64_t fsTime = getMTime(fragmentShaderPath);
+            std::string vsSource;
+            std::string fsSource;
+            readText(vertexShaderPath, vsSource);
+            readText(fragmentShaderPath, fsSource);
+            newProgram->setCompileInfo(vertexShaderPath, fragmentShaderPath,
+                                       vsSource, fsSource, vsTime, fsTime);
+            shaderFiles.push_back(newProgram);
+        }
     }
 
     numImageFiles = static_cast<int32_t>(imageFiles.size());
-
     imageFileNames = new char *[numImageFiles];
-    for (int64_t i = 0, size = numImageFiles; i < size; i++) {
+    for (int64_t i = 0; i < numImageFiles; i++) {
         std::shared_ptr<Image> image = imageFiles[i];
-        const std::string &path = image->getName();
+        const std::string &path = image->getPath();
         const int64_t fileNameLength = path.size();
         char *fileName = new char[fileNameLength + 1];
         fileName[fileNameLength] = '\0';
-        image->getName().copy(fileName, fileNameLength, 0);
+        image->getPath().copy(fileName, fileNameLength, 0);
         imageFileNames[i] = fileName;
     }
 
     AppLog::getInstance().addLog("Images:\n");
-    for (int64_t i = 0, size = imageFiles.size(); i < size; i++) {
+    for (int64_t i = 0; i < numImageFiles; i++) {
         AppLog::getInstance().addLog("%s\n", imageFileNames[i]);
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    numShaderFiles = static_cast<int32_t>(shaderFiles.size());
+    shaderFileNames = new char *[numShaderFiles];
+
+    for (int64_t i = 0; i < numShaderFiles; i++) {
+        std::string fileStr = shaderFiles[i]->getFragmentShader().getPath();
+        const int64_t fileNameLength = fileStr.size();
+        char *fileName = new char[fileNameLength + 1];
+        fileName[fileNameLength] = '\0';
+        fileStr.copy(fileName, fileNameLength, 0);
+        shaderFileNames[i] = fileName;
+    }
+
+    AppLog::getInstance().addLog("Shaders:\n");
+    for (int64_t i = 0; i < numShaderFiles; i++) {
+        AppLog::getInstance().addLog("%s\n", shaderFileNames[i]);
+    }
 }
 }  // namespace
 
@@ -866,6 +911,8 @@ int main(void) {
     ImGui::SetCurrentContext(ImGui::CreateContext());
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);
     ImGui_ImplOpenGL3_Init(GlslVersion);
+
+    ImGui::StyleColorsClassic();
 
     glfwMakeContextCurrent(mainWindow);
 
@@ -919,7 +966,7 @@ int main(void) {
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    loadImages("./assets");
+    loadFiles("./assets");
 
     timeStart = static_cast<float>(ImGui::GetTime());
 
