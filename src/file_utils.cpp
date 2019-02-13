@@ -101,11 +101,7 @@ bool readText(const std::string &path, std::string &memblock) {
 
 void writeText(const std::string &path, const char *const memblock,
                uint32_t size) {
-    FILE *fp;
-    int32_t fd;
-
-    fd = open(path.c_str(), O_WRONLY | O_BINARY);
-    fp = fdopen(fd, "wb");
+    FILE *fp = fopen(path.c_str(), "wb");
     fwrite(memblock, sizeof(char), size, fp);
     fclose(fp);
 }

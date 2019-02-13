@@ -45,7 +45,7 @@ GLuint vertexArraysObject = 0;
 std::string shaderToyPreSource;
 
 std::shared_ptr<ShaderProgram> program;
-ShaderProgram copyProgram;
+std::shared_ptr<ShaderProgram> copyProgram;
 
 int32_t writeBufferIndex = 0;
 int32_t readBufferIndex = 1;
@@ -82,7 +82,59 @@ void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
-void compileShaderFromFile(ShaderProgram &program, const std::string &vsPath,
+void deleteShaderFileNamse() {
+    if (shaderFileNames != nullptr) {
+        for (int64_t i = 0; i < numShaderFileNames; i++) {
+            delete[] shaderFileNames[i];
+        }
+        delete[] shaderFileNames;
+    }
+    shaderFileNames = nullptr;
+}
+
+void deleteImageFileNames() {
+    if (imageFileNames != nullptr) {
+        for (int64_t i = 0; i < numImageFileNames; i++) {
+            delete[] imageFileNames[i];
+        }
+        delete[] imageFileNames;
+    }
+    imageFileNames = nullptr;
+}
+
+void genShaderFileNames() {
+    deleteShaderFileNamse();
+
+    numShaderFileNames = static_cast<int32_t>(shaderFiles.size());
+    shaderFileNames = new char *[numShaderFileNames];
+
+    for (int64_t i = 0; i < numShaderFileNames; i++) {
+        std::string fileStr = shaderFiles[i]->getFragmentShader().getPath();
+        const int64_t fileNameLength = fileStr.size();
+        char *fileName = new char[fileNameLength + 1];
+        fileName[fileNameLength] = '\0';
+        fileStr.copy(fileName, fileNameLength, 0);
+        shaderFileNames[i] = fileName;
+    }
+}
+
+void genImageFileNames() {
+    deleteImageFileNames();
+
+    numImageFileNames = static_cast<int32_t>(imageFiles.size());
+    imageFileNames = new char *[numImageFileNames];
+    for (int64_t i = 0; i < numImageFileNames; i++) {
+        std::shared_ptr<Image> image = imageFiles[i];
+        const std::string &path = image->getPath();
+        const int64_t fileNameLength = path.size();
+        char *fileName = new char[fileNameLength + 1];
+        fileName[fileNameLength] = '\0';
+        image->getPath().copy(fileName, fileNameLength, 0);
+        imageFileNames[i] = fileName;
+    }
+}
+
+void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program, const std::string &vsPath,
                            const std::string &fsPath) {
     const int64_t vsTime = getMTime(vsPath);
     const int64_t fsTime = getMTime(fsPath);
@@ -90,7 +142,7 @@ void compileShaderFromFile(ShaderProgram &program, const std::string &vsPath,
     std::string fsSource;
     readText(vsPath, vsSource);
     readText(fsPath, fsSource);
-    program.compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+    program->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
 void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
@@ -154,7 +206,8 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
 }
 
-void ShowTextEditor(bool &showTextEditor) {
+void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
+                    int32_t uiPlatform) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
         "Text Editor", nullptr,
@@ -166,8 +219,45 @@ void ShowTextEditor(bool &showTextEditor) {
                 const std::string &textToSave = editor.GetText();
                 const char *const buffer = textToSave.c_str();
                 const int64_t size = textToSave.size();
-                writeText(program->getFragmentShader().getPath(), buffer,
-                          static_cast<int32_t>(size));
+
+                if (uiShader != 0) {
+                    writeText(program->getFragmentShader().getPath(), buffer,
+                              static_cast<int32_t>(size));
+                } else {
+                    std::string path;
+
+                    if (saveFileDialog(path,
+                                       "Shader file (*.glsl)\0*.glsl\0")) {
+                        std::shared_ptr<ShaderProgram> newProgram =
+                            std::make_shared<ShaderProgram>();
+
+                        if (uiPlatform == 1) {
+                            newProgram->setFragmentShaderPreSource(
+                                shaderToyPreSource);
+                        }
+
+                        writeText(path, buffer, static_cast<int32_t>(size));
+
+                        const std::string &vsPath =
+                            program->getVertexShader().getPath();
+                        const std::string &fsPath = path;
+                        const int64_t vsTime = getMTime(vsPath);
+                        const int64_t fsTime = getMTime(fsPath);
+                        const std::string &vsSource =
+                            program->getVertexShader().getSource();
+                        const std::string &fsSource = textToSave;
+
+                        newProgram->compile(vsPath, fsPath, vsSource, fsSource,
+                                            vsTime, fsTime);
+
+                        shaderFiles.push_back(newProgram);
+                        genShaderFileNames();
+
+                        uiShader = numShaderFileNames - 1;
+
+                        program.swap(newProgram);
+                    }
+                }
             }
 
             if (ImGui::MenuItem("Close")) {
@@ -279,56 +369,43 @@ void writeOneFrame() {
     fwrite(yuvBuffer, sizeof(uint8_t), bufferWidth * bufferHeight * 3, fVideo);
 }
 
-void deleteShaderFileNamse() {
-    if (shaderFileNames != nullptr) {
-        for (int64_t i = 0; i < numShaderFileNames; i++) {
-            delete[] shaderFileNames[i];
-        }
-        delete[] shaderFileNames;
+void startRecord(const std::string &fileName, const int32_t uiVideoResolution,
+                 float &uiTimeValue) {
+    isRecording = true;
+    currentFrame = 0;
+    uiTimeValue = 0;
+
+    switch (uiVideoResolution) {
+        case 0:
+            updateFrameBuffersSize(256, 144);
+            break;
+        case 1:
+            updateFrameBuffersSize(427, 240);
+            break;
+        case 2:
+            updateFrameBuffersSize(640, 360);
+            break;
+        case 3:
+            updateFrameBuffersSize(720, 480);
+            break;
+        case 4:
+            updateFrameBuffersSize(1280, 720);
+            break;
+        case 5:
+            updateFrameBuffersSize(1920, 1080);
+            break;
+        case 6:
+            updateFrameBuffersSize(2560, 1440);
+            break;
+        case 7:
+            updateFrameBuffersSize(3840, 2160);
+            break;
     }
-    shaderFileNames = nullptr;
-}
 
-void deleteImageFileNames() {
-    if (imageFileNames != nullptr) {
-        for (int64_t i = 0; i < numImageFileNames; i++) {
-            delete[] imageFileNames[i];
-        }
-        delete[] imageFileNames;
-    }
-    imageFileNames = nullptr;
-}
+    fVideo = fopen(fileName.c_str(), "wb");
 
-void genShaderFileNames() {
-    deleteShaderFileNamse();
-
-    numShaderFileNames = static_cast<int32_t>(shaderFiles.size());
-    shaderFileNames = new char *[numShaderFileNames];
-
-    for (int64_t i = 0; i < numShaderFileNames; i++) {
-        std::string fileStr = shaderFiles[i]->getFragmentShader().getPath();
-        const int64_t fileNameLength = fileStr.size();
-        char *fileName = new char[fileNameLength + 1];
-        fileName[fileNameLength] = '\0';
-        fileStr.copy(fileName, fileNameLength, 0);
-        shaderFileNames[i] = fileName;
-    }
-}
-
-void genImageFileNames() {
-    deleteImageFileNames();
-
-    numImageFileNames = static_cast<int32_t>(imageFiles.size());
-    imageFileNames = new char *[numImageFileNames];
-    for (int64_t i = 0; i < numImageFileNames; i++) {
-        std::shared_ptr<Image> image = imageFiles[i];
-        const std::string &path = image->getPath();
-        const int64_t fileNameLength = path.size();
-        char *fileName = new char[fileNameLength + 1];
-        fileName[fileNameLength] = '\0';
-        image->getPath().copy(fileName, fileNameLength, 0);
-        imageFileNames[i] = fileName;
-    }
+    fprintf(fVideo, "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C444 XYSCSS=444\n",
+            bufferWidth, bufferHeight);
 }
 
 void update(void *) {
@@ -493,7 +570,6 @@ void update(void *) {
                 swapProgram(newProgram);
             }
 
-            // TODO: Load Shader.
             if (ImGui::Combo("File", &uiShader, shaderFileNames,
                              numShaderFileNames)) {
                 std::shared_ptr<ShaderProgram> newProgram =
@@ -502,11 +578,12 @@ void update(void *) {
                 if (uiPlatform == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 } else {
-                    newProgram->setFragmentShaderPreSource("");
+                    newProgram->setFragmentShaderPreSource(std::string());
                 }
 
                 newProgram->compile();
 
+                editor.SetText(newProgram->getFragmentShader().getSource());
                 editor.SetErrorMarkers(
                     newProgram->getFragmentShader().getErrors());
 
@@ -526,7 +603,7 @@ void update(void *) {
                             shaderToyPreSource);
                     }
 
-                    compileShaderFromFile(*newProgram,
+                    compileShaderFromFile(newProgram,
                                           program->getVertexShader().getPath(),
                                           path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
@@ -665,52 +742,15 @@ void update(void *) {
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
             if (ImGui::Button("Save")) {
-                isRecording = true;
-                currentFrame = 0;
-                uiTimeValue = 0;
-
-                switch (uiVideoResolution) {
-                    case 0:
-                        updateFrameBuffersSize(256, 144);
-                        break;
-                    case 1:
-                        updateFrameBuffersSize(427, 240);
-                        break;
-                    case 2:
-                        updateFrameBuffersSize(640, 360);
-                        break;
-                    case 3:
-                        updateFrameBuffersSize(720, 480);
-                        break;
-                    case 4:
-                        updateFrameBuffersSize(1280, 720);
-                        break;
-                    case 5:
-                        updateFrameBuffersSize(1920, 1080);
-                        break;
-                    case 6:
-                        updateFrameBuffersSize(2560, 1440);
-                        break;
-                    case 7:
-                        updateFrameBuffersSize(3840, 2160);
-                        break;
+                std::string fileName = "video.y4m";
+#if defined(_MSC_VER) || defined(__MINGW32__)
+                if (saveFileDialog(fileName, "Video file (*.y4m)\0*.y4m\0")) {
+#endif
+                    startRecord(fileName, uiVideoResolution, uiTimeValue);
+                    ImGui::OpenPopup("Export Progress");
+#if defined(_MSC_VER) || defined(__MINGW32__)
                 }
-
-                // update framebuffers
-                bufferScale =
-                    1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
-                updateFrameBuffersSize(
-                    static_cast<GLint>(currentWidth * bufferScale),
-                    static_cast<GLint>(currentHeight * bufferScale));
-
-                fVideo = fopen("video.y4m", "wb");
-
-                fprintf(
-                    fVideo,
-                    "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C444 XYSCSS=444\n",
-                    bufferWidth, bufferHeight);
-
-                ImGui::OpenPopup("Export Progress");
+#endif
             }
 
             if (ImGui::BeginPopupModal("Export Progress", NULL,
@@ -742,7 +782,7 @@ void update(void *) {
     }
 
     if (showTextEditor) {
-        ShowTextEditor(showTextEditor);
+        ShowTextEditor(showTextEditor, uiShader, uiPlatform);
     }
 
     if (showAppLogWindow) {
@@ -849,15 +889,15 @@ void update(void *) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, windowWidth, windowHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(copyProgram.getProgram());
+    glUseProgram(copyProgram->getProgram());
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
 
-    copyProgram.setUniformValue("backbuffer", 0);
-    copyProgram.setUniformValue("resolution",
+    copyProgram->setUniformValue("backbuffer", 0);
+    copyProgram->setUniformValue("resolution",
                                 glm::vec2(windowWidth, windowHeight));
-    copyProgram.applyUniforms();
+    copyProgram->applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
@@ -976,11 +1016,12 @@ int main(void) {
 
     // Compile shaders.
     program.reset(new ShaderProgram());
-    compileShaderFromFile(*program, vertexShaderPath, fragmentShaderPath);
+    compileShaderFromFile(program, vertexShaderPath, fragmentShaderPath);
     assert(program->isOK());
 
+    copyProgram.reset(new ShaderProgram());
     compileShaderFromFile(copyProgram, vertexShaderPath, copyFS);
-    assert(copyProgram.isOK());
+    assert(copyProgram->isOK());
 
     // Initialize Buffers
     glGenVertexArrays(1, &vertexArraysObject);
@@ -1020,16 +1061,6 @@ int main(void) {
     genImageFileNames();
 
     genShaderFileNames();
-
-    AppLog::getInstance().addLog("Images:\n");
-    for (int64_t i = 0; i < numImageFileNames; i++) {
-        AppLog::getInstance().addLog("%s\n", imageFileNames[i]);
-    }
-
-    AppLog::getInstance().addLog("Shaders:\n");
-    for (int64_t i = 0; i < numShaderFileNames; i++) {
-        AppLog::getInstance().addLog("%s\n", shaderFileNames[i]);
-    }
 
     timeStart = static_cast<float>(ImGui::GetTime());
 

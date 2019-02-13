@@ -28,5 +28,35 @@ bool openFileDialog(std::string &path, const char *const filter) {
     return result;
 }
 #else
-bool openFileDialog(std::string &path, const char * const filter) { return false; }
+bool openFileDialog(std::string &path, const char *const filter) {
+    return false;
+}
+#endif
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+bool saveFileDialog(std::string &path, const char *const filter) {
+    OPENFILENAMEA ofn;
+    char szFile[MAX_PATH + 1] = "";
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(OPENFILENAME);
+    ofn.lpstrFilter = filter;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_OVERWRITEPROMPT;
+
+    char cwd[MAX_PATH];
+    GetCurrentDirectory(sizeof(cwd), cwd);
+    bool result = GetSaveFileName(&ofn);
+    SetCurrentDirectory(cwd);
+
+    if (result) {
+        path.assign(szFile);
+    }
+
+    return result;
+}
+#else
+bool saveFileDialog(std::string &path, const char *const filter) {
+    return false;
+}
 #endif
