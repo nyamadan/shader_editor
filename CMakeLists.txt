@@ -3,6 +3,7 @@ project(shader_editor VERSION 0.1.0)
 
 set(APP_SOURCES
     src/main.cpp
+    src/image.cpp
     src/platform.cpp
     src/app_log.cpp
     src/shader_utils.cpp
