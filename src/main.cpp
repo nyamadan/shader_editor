@@ -134,7 +134,8 @@ void genImageFileNames() {
     }
 }
 
-void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program, const std::string &vsPath,
+void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
+                           const std::string &vsPath,
                            const std::string &fsPath) {
     const int64_t vsTime = getMTime(vsPath);
     const int64_t fsTime = getMTime(fsPath);
@@ -266,6 +267,7 @@ void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
 
             ImGui::EndMenu();
         }
+
         if (ImGui::BeginMenu("Edit")) {
             bool ro = editor.IsReadOnly();
             if (ImGui::MenuItem("Read-only mode", nullptr, &ro))
@@ -413,7 +415,14 @@ void update(void *) {
     static bool showImGuiDemoWindow = false;
 #endif
 
-    static bool showDebugWindow = true;
+    static bool uiShaderFileWindow = false;
+    static bool uiTimeWindow = false;
+    static bool uiStatsWindow = false;
+    static bool uiUniformWindow = false;
+    static bool uiBackBufferWindow = false;
+    static bool uiCaptureWindow = false;
+
+    static bool uiDebugWindow = true;
     static bool showAppLogWindow = false;
     static bool showTextEditor = false;
 
@@ -457,6 +466,13 @@ void update(void *) {
             break;
     }
 
+    glfwMakeContextCurrent(mainWindow);
+    glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
     std::shared_ptr<ShaderProgram> newProgram =
         std::make_shared<ShaderProgram>();
 
@@ -491,9 +507,6 @@ void update(void *) {
         recompileFragmentShader(program, newProgram, editor.GetText());
         editor.SetErrorMarkers(newProgram->getFragmentShader().getErrors());
     }
-
-    glfwMakeContextCurrent(mainWindow);
-    glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
 
     if (newProgram->isOK()) {
         swapProgram(newProgram);
@@ -544,12 +557,30 @@ void update(void *) {
         }
     }
 
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+        uiDebugWindow = !uiDebugWindow;
+    }
 
-    if (showDebugWindow) {
-        if (ImGui::CollapsingHeader("Platform")) {
+    if (uiDebugWindow) {
+        ImGui::Begin("Shader Editor", &uiDebugWindow);
+
+        ImGui::Checkbox("File Window", &uiShaderFileWindow);
+        ImGui::Checkbox("Time Window", &uiTimeWindow);
+        ImGui::Checkbox("Stats Window", &uiStatsWindow);
+        ImGui::Checkbox("Uniforms Window", &uiUniformWindow);
+        ImGui::Checkbox("BackBuffer Window", &uiBackBufferWindow);
+        ImGui::Checkbox("Capture Window", &uiCaptureWindow);
+
+        ImGui::Checkbox("Log", &showAppLogWindow);
+        ImGui::Checkbox("TextEditor", &showTextEditor);
+#ifndef NDEBUG
+        ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
+#endif
+
+        ImGui::End();
+
+        if (uiShaderFileWindow) {
+            ImGui::Begin("File", &uiShaderFileWindow);
             const char *const items[] = {"glslsandbox", "shadertoy"};
             if (ImGui::Combo("platform", &uiPlatform, items,
                              IM_ARRAYSIZE(items))) {
@@ -603,9 +634,8 @@ void update(void *) {
                             shaderToyPreSource);
                     }
 
-                    compileShaderFromFile(newProgram,
-                                          program->getVertexShader().getPath(),
-                                          path);
+                    compileShaderFromFile(
+                        newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
                     editor.SetErrorMarkers(
                         newProgram->getFragmentShader().getErrors());
@@ -619,9 +649,81 @@ void update(void *) {
                 }
             }
 #endif
+
+            ImGui::End();
         }
 
-        if (ImGui::CollapsingHeader("Stats")) {
+        if (uiTimeWindow) {
+            ImGui::Begin("Time", &uiTimeWindow);
+            if (uiPlaying) {
+                ImGui::LabelText("time", "%s",
+                                 std::to_string(uiTimeValue).c_str());
+            } else {
+                ImGui::DragFloat("time", &uiTimeValue, 0.5f);
+            }
+
+            ImGui::Checkbox("Playing", &uiPlaying);
+
+            if (ImGui::Button("Reset")) {
+                timeStart = now;
+                uiTimeValue = 0;
+                currentFrame = 0;
+            }
+            ImGui::End();
+        }
+
+        if (uiCaptureWindow) {
+            ImGui::Begin("Capture", &uiCaptureWindow);
+            const char *items[] = {"256x144",   "427x240",  "640x360",
+                                   "720x480",   "1280x720", "1920x1080",
+                                   "2560x1440", "3840x2160"};
+
+            if (ImGui::Combo("resolution", &uiVideoResolution, items,
+                             IM_ARRAYSIZE(items))) {
+            }
+
+            ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
+
+            std::stringstream ss;
+            ss.str(std::string());
+            ss << 30000.0f / 1001.0f << " hz";
+            ImGui::LabelText("framerate", "%s", ss.str().c_str());
+
+            if (ImGui::Button("Save")) {
+                std::string fileName = "video.y4m";
+#if defined(_MSC_VER) || defined(__MINGW32__)
+                if (saveFileDialog(fileName, "Video file (*.y4m)\0*.y4m\0")) {
+#endif
+                    startRecord(fileName, uiVideoResolution, uiTimeValue);
+                    ImGui::OpenPopup("Export Progress");
+#if defined(_MSC_VER) || defined(__MINGW32__)
+                }
+#endif
+            }
+
+            if (ImGui::BeginPopupModal("Export Progress", NULL,
+                                       ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (!isRecording) {
+                    ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
+
+                    ImGui::Separator();
+
+                    if (ImGui::Button("OK", ImVec2(120, 0))) {
+                        ImGui::CloseCurrentPopup();
+                    }
+                } else {
+                    float value = uiTimeValue / uiVideoTime;
+                    ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
+                }
+
+                ImGui::EndPopup();
+            }
+            ImGui::End();
+        }
+
+        if (uiStatsWindow) {
+            ImGui::Begin("Stats", &uiStatsWindow);
+
             std::stringstream ss;
 
             ss.str(std::string());
@@ -631,9 +733,11 @@ void update(void *) {
             ss.str(std::string());
             ss << ImGui::GetIO().Framerate;
             ImGui::LabelText("fps", "%s", ss.str().c_str());
+            ImGui::End();
         }
 
-        if (ImGui::CollapsingHeader("Uniforms")) {
+        if (uiUniformWindow) {
+            ImGui::Begin("Uniforms", &uiUniformWindow);
             std::map<const std::string, ShaderUniform> &uniforms =
                 program->getUniforms();
             for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
@@ -685,26 +789,11 @@ void update(void *) {
                         break;
                 }
             }
+            ImGui::End();
         }
 
-        if (ImGui::CollapsingHeader("Time")) {
-            if (uiPlaying) {
-                ImGui::LabelText("time", "%s",
-                                 std::to_string(uiTimeValue).c_str());
-            } else {
-                ImGui::DragFloat("time", &uiTimeValue, 0.5f);
-            }
-
-            ImGui::Checkbox("Playing", &uiPlaying);
-
-            if (ImGui::Button("Reset")) {
-                timeStart = now;
-                uiTimeValue = 0;
-                currentFrame = 0;
-            }
-        }
-
-        if (ImGui::CollapsingHeader("Buffer")) {
+        if (uiBackBufferWindow) {
+            ImGui::Begin("BackBuffer", &uiBackBufferWindow);
             const char *const items[] = {"0.5", "1", "2", "4", "8"};
             if (ImGui::Combo("quality", &uiBufferQuality, items,
                              IM_ARRAYSIZE(items))) {
@@ -723,77 +812,23 @@ void update(void *) {
             std::stringstream bufferStringStream;
             bufferStringStream << bufferWidth << ", " << bufferHeight;
             ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
+            ImGui::End();
         }
 
-        if (ImGui::CollapsingHeader("Export")) {
-            const char *items[] = {"256x144",   "427x240",  "640x360",
-                                   "720x480",   "1280x720", "1920x1080",
-                                   "2560x1440", "3840x2160"};
-
-            if (ImGui::Combo("resolution", &uiVideoResolution, items,
-                             IM_ARRAYSIZE(items))) {
-            }
-
-            ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
-
-            std::stringstream ss;
-            ss.str(std::string());
-            ss << 30000.0f / 1001.0f << " hz";
-            ImGui::LabelText("framerate", "%s", ss.str().c_str());
-
-            if (ImGui::Button("Save")) {
-                std::string fileName = "video.y4m";
-#if defined(_MSC_VER) || defined(__MINGW32__)
-                if (saveFileDialog(fileName, "Video file (*.y4m)\0*.y4m\0")) {
-#endif
-                    startRecord(fileName, uiVideoResolution, uiTimeValue);
-                    ImGui::OpenPopup("Export Progress");
-#if defined(_MSC_VER) || defined(__MINGW32__)
-                }
-#endif
-            }
-
-            if (ImGui::BeginPopupModal("Export Progress", NULL,
-                                       ImGuiWindowFlags_AlwaysAutoResize)) {
-                if (!isRecording) {
-                    ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
-
-                    ImGui::Separator();
-
-                    if (ImGui::Button("OK", ImVec2(120, 0))) {
-                        ImGui::CloseCurrentPopup();
-                    }
-                } else {
-                    float value = uiTimeValue / uiVideoTime;
-                    ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
-                }
-
-                ImGui::EndPopup();
-            }
+        if (showTextEditor) {
+            ShowTextEditor(showTextEditor, uiShader, uiPlatform);
         }
 
-        if (ImGui::CollapsingHeader("Window")) {
-            ImGui::Checkbox("Log", &showAppLogWindow);
-            ImGui::Checkbox("TextEditor", &showTextEditor);
-#ifndef NDEBUG
-            ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
-#endif
+        if (showAppLogWindow) {
+            AppLog::getInstance().showAppLogWindow(showAppLogWindow);
         }
-    }
-
-    if (showTextEditor) {
-        ShowTextEditor(showTextEditor, uiShader, uiPlatform);
-    }
-
-    if (showAppLogWindow) {
-        AppLog::getInstance().showAppLogWindow(showAppLogWindow);
-    }
 
 #ifndef NDEBUG
-    if (showImGuiDemoWindow) {
-        ImGui::ShowDemoWindow(&showImGuiDemoWindow);
-    }
+        if (showImGuiDemoWindow) {
+            ImGui::ShowDemoWindow(&showImGuiDemoWindow);
+        }
 #endif
+    }
 
     ImGui::Render();
 
@@ -896,7 +931,7 @@ void update(void *) {
 
     copyProgram->setUniformValue("backbuffer", 0);
     copyProgram->setUniformValue("resolution",
-                                glm::vec2(windowWidth, windowHeight));
+                                 glm::vec2(windowWidth, windowHeight));
     copyProgram->applyUniforms();
 
     glBindVertexArray(vertexArraysObject);
