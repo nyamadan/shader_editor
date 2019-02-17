@@ -211,7 +211,7 @@ void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
                     int32_t uiPlatform) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
-        "Text Editor", nullptr,
+        "Text Editor", &showTextEditor,
         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     if (ImGui::BeginMenuBar()) {
@@ -562,7 +562,8 @@ void update(void *) {
     }
 
     if (uiDebugWindow) {
-        ImGui::Begin("Shader Editor", &uiDebugWindow);
+        ImGui::Begin("Shader Editor", &uiDebugWindow,
+                     ImGuiWindowFlags_AlwaysAutoResize);
 
         ImGui::Checkbox("File Window", &uiShaderFileWindow);
         ImGui::Checkbox("Time Window", &uiTimeWindow);
@@ -580,7 +581,9 @@ void update(void *) {
         ImGui::End();
 
         if (uiShaderFileWindow) {
-            ImGui::Begin("File", &uiShaderFileWindow);
+            ImGui::Begin("File", &uiShaderFileWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
+
             const char *const items[] = {"glslsandbox", "shadertoy"};
             if (ImGui::Combo("platform", &uiPlatform, items,
                              IM_ARRAYSIZE(items))) {
@@ -654,7 +657,8 @@ void update(void *) {
         }
 
         if (uiTimeWindow) {
-            ImGui::Begin("Time", &uiTimeWindow);
+            ImGui::Begin("Time", &uiTimeWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
             if (uiPlaying) {
                 ImGui::LabelText("time", "%s",
                                  std::to_string(uiTimeValue).c_str());
@@ -673,7 +677,8 @@ void update(void *) {
         }
 
         if (uiCaptureWindow) {
-            ImGui::Begin("Capture", &uiCaptureWindow);
+            ImGui::Begin("Capture", &uiCaptureWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
             const char *items[] = {"256x144",   "427x240",  "640x360",
                                    "720x480",   "1280x720", "1920x1080",
                                    "2560x1440", "3840x2160"};
@@ -722,7 +727,8 @@ void update(void *) {
         }
 
         if (uiStatsWindow) {
-            ImGui::Begin("Stats", &uiStatsWindow);
+            ImGui::Begin("Stats", &uiStatsWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
 
             std::stringstream ss;
 
@@ -737,7 +743,8 @@ void update(void *) {
         }
 
         if (uiUniformWindow) {
-            ImGui::Begin("Uniforms", &uiUniformWindow);
+            ImGui::Begin("Uniforms", &uiUniformWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
             std::map<const std::string, ShaderUniform> &uniforms =
                 program->getUniforms();
             for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
@@ -793,7 +800,8 @@ void update(void *) {
         }
 
         if (uiBackBufferWindow) {
-            ImGui::Begin("BackBuffer", &uiBackBufferWindow);
+            ImGui::Begin("BackBuffer", &uiBackBufferWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
             const char *const items[] = {"0.5", "1", "2", "4", "8"};
             if (ImGui::Combo("quality", &uiBufferQuality, items,
                              IM_ARRAYSIZE(items))) {

@@ -25,6 +25,9 @@ set(IMGUI_SOURCES
     ImGuiColorTextEdit/TextEditor.cpp
 )
 
+# C++17
+set (CMAKE_CXX_STANDARD 17)
+
 #GLM
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
 include_directories(./glm)
@@ -39,15 +42,14 @@ add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
 include_directories(./stb)
 
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     set(CMAKE_EXE_LINKER_FLAGS "--embed-file ${PROJECT_SOURCE_DIR}/default@default --embed-file ${PROJECT_SOURCE_DIR}/assets@assets --no-heap-copy -s USE_WEBGL2=1 -s USE_GLFW=3 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
 
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES})
 elseif(MSVC)
-    set(CMAKE_C "${CMAKE_C_FLAGS} /J")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /J")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /J")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J")
 
     # OpenGL
     find_package(OpenGL REQUIRED)
@@ -65,8 +67,6 @@ elseif(MSVC)
     add_dependencies(shader_editor glfw)
     target_link_libraries(shader_editor ${OPENGL_LIBRARIES} glfw)
 else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-
     # OpenGL
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIRS})
