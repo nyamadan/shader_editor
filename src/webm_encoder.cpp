@@ -188,7 +188,7 @@ bool WebmEncoder::RGBAtoVPXImage(const uint8_t *rgba) {
             rgba - 1, cfg.g_w * 4, img->planes[VPX_PLANE_Y],
             img->stride[VPX_PLANE_Y], img->planes[VPX_PLANE_U],
             img->stride[VPX_PLANE_U], img->planes[VPX_PLANE_V],
-            img->stride[VPX_PLANE_V], cfg.g_w, cfg.g_h) != 0) {
+            img->stride[VPX_PLANE_V], cfg.g_w, -cfg.g_h) != 0) {
         last_error = "Could not convert to I420";
         return false;
     }

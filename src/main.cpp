@@ -417,7 +417,7 @@ void writeOneFrame(const int32_t uiVideoTypeIndex) {
         case 0: {
             libyuv::BGRAToI420(rgbaBuffer - 1, bufferWidth * 4, yBuffer,
                                yStride, uBuffer, uStride, vBuffer, vStride,
-                               bufferWidth, bufferHeight);
+                               bufferWidth, -bufferHeight);
 
             fputs("FRAME\n", fVideo);
             fwrite(yuvBuffer, sizeof(uint8_t), ySize + uSize + vSize, fVideo);
