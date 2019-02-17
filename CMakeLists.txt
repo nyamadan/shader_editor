@@ -1,5 +1,7 @@
-cmake_minimum_required(VERSION 3.0.0)
-project(shader_editor VERSION 0.1.0)
+cmake_minimum_required(VERSION 3.1.0)
+project(shader_editor VERSION 0.0.1)
+
+set(MSVC_RUNTIME "dll")
 
 set(APP_SOURCES
     src/main.cpp
@@ -9,6 +11,8 @@ set(APP_SOURCES
     src/shader_utils.cpp
     src/shader_program.cpp
     src/file_utils.cpp
+    src/webm_encoder.cpp
+    src/mymkvwriter.cpp
 )
 
 set(GL3W_SOURCES
@@ -36,6 +40,16 @@ include_directories(./glm)
 include_directories(./imgui)
 include_directories(./ImGuiColorTextEdit)
 
+# WebM
+add_subdirectory(./libyuv)
+include_directories(./libyuv/include)
+
+add_subdirectory(./libwebm)
+include_directories(./libwebm)
+
+# add_subdirectory(./libvpx)
+include_directories(./libvpx)
+
 # stb
 add_definitions(-DSTB_IMAGE_IMPLEMENTATION)
 add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
@@ -62,10 +76,17 @@ elseif(MSVC)
     add_subdirectory(./glfw)
     include_directories(./glfw/include)
 
+    # VPX
+    if (${CMAKE_BUILD_TYPE} MATCHES Release)
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib)
+    else()
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx/x64/Debug/vpxmdd.lib)
+    endif()
+
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
-    add_dependencies(shader_editor glfw)
-    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} glfw)
+    add_dependencies(shader_editor glfw webm yuv)
+    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} ${LIB_VPX} glfw webm yuv)
 else()
     # OpenGL
     find_package(OpenGL REQUIRED)
