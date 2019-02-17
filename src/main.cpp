@@ -19,6 +19,7 @@
 #include "shader_program.hpp"
 #include "app_log.hpp"
 #include "image.hpp"
+#include "webm_encoder.hpp"
 
 namespace {
 
@@ -62,6 +63,8 @@ uint8_t *yuvBuffer = nullptr;
 int64_t currentFrame = 0;
 bool isRecording = false;
 FILE *fVideo;
+
+std::unique_ptr<WebmEncoder> pEncoder = nullptr;
 
 std::vector<std::shared_ptr<Image>> imageFiles;
 int32_t numImageFileNames = 0;
@@ -204,7 +207,11 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     }
 
     rgbaBuffer = new uint8_t[bufferWidth * bufferHeight * 4];
-    yuvBuffer = new uint8_t[bufferWidth * bufferHeight * 3];
+
+    const int32_t ySize = bufferWidth * bufferHeight;
+    const int32_t uSize = ySize / 4;
+    const int32_t vSize = uSize;
+    yuvBuffer = new uint8_t[ySize + uSize + vSize];
 }
 
 void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
@@ -345,33 +352,8 @@ void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
     program.swap(newProgram);
 }
 
-void writeOneFrame() {
-    for (int32_t x = 0; x < bufferWidth; x++) {
-        for (int32_t y = 0; y < bufferHeight; y++) {
-            const int32_t i = y * bufferWidth + x;
-            const int32_t j = i * 4;
-            const int32_t size = bufferWidth * bufferHeight;
-            const uint8_t R = rgbaBuffer[j + 0];
-            const uint8_t G = rgbaBuffer[j + 1];
-            const uint8_t B = rgbaBuffer[j + 2];
-            const uint8_t Y =
-                static_cast<uint8_t>(0.299 * R + 0.587 * G + 0.114 * B);
-            const uint8_t U =
-                static_cast<uint8_t>(-0.169 * R - 0.331 * G + 0.5 * B + 128);
-            const uint8_t V =
-                static_cast<uint8_t>(0.5 * R - 0.419 * G - 0.081 * B + 128);
-
-            yuvBuffer[i] = Y;
-            yuvBuffer[i + size] = U;
-            yuvBuffer[i + size * 2] = V;
-        }
-    }
-
-    fputs("FRAME\n", fVideo);
-    fwrite(yuvBuffer, sizeof(uint8_t), bufferWidth * bufferHeight * 3, fVideo);
-}
-
-void startRecord(const std::string &fileName, const int32_t uiVideoResolution,
+void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
+                 const int32_t uiVideoResolution, const int32_t kbps,
                  float &uiTimeValue) {
     isRecording = true;
     currentFrame = 0;
@@ -404,10 +386,46 @@ void startRecord(const std::string &fileName, const int32_t uiVideoResolution,
             break;
     }
 
-    fVideo = fopen(fileName.c_str(), "wb");
+    switch (uiVideoTypeIndex) {
+        case 0: {
+            fVideo = fopen(fileName.c_str(), "wb");
+            fprintf(fVideo,
+                    "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C420 XYSCSS=420\n",
+                    bufferWidth, bufferHeight);
+        } break;
+        case 1: {
+            pEncoder = std::make_unique<WebmEncoder>(
+                fileName, 1001, 30000, bufferWidth, bufferHeight, kbps);
+        } break;
+    }
+}
 
-    fprintf(fVideo, "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C444 XYSCSS=444\n",
-            bufferWidth, bufferHeight);
+void writeOneFrame(const int32_t uiVideoTypeIndex) {
+    const int32_t ySize = bufferWidth * bufferHeight;
+    const int32_t uSize = ySize / 4;
+    const int32_t vSize = uSize;
+
+    const int32_t yStride = bufferWidth;
+    const int32_t uStride = bufferWidth / 2;
+    const int32_t vStride = uStride;
+
+    uint8_t *yBuffer = yuvBuffer;
+    uint8_t *uBuffer = yBuffer + ySize;
+    uint8_t *vBuffer = uBuffer + uSize;
+
+    switch (uiVideoTypeIndex) {
+        case 0: {
+            libyuv::BGRAToI420(rgbaBuffer - 1, bufferWidth * 4, yBuffer,
+                               yStride, uBuffer, uStride, vBuffer, vStride,
+                               bufferWidth, bufferHeight);
+
+            fputs("FRAME\n", fVideo);
+            fwrite(yuvBuffer, sizeof(uint8_t), ySize + uSize + vSize, fVideo);
+        } break;
+        case 1: {
+            pEncoder->addRGBAFrame(rgbaBuffer);
+        } break;
+    }
 }
 
 void update(void *) {
@@ -429,17 +447,19 @@ void update(void *) {
     static float uiTimeValue = 0;
     static bool uiPlaying = true;
 
-    static int32_t uiShader = 0;
-    static int32_t uiPlatform = 0;
-    static int32_t uiBufferQuality = 2;
-    static int32_t uiVideoResolution = 2;
+    static int32_t uiShaderFileIndex = 0;
+    static int32_t uiShaderPlatformIndex = 0;
+    static int32_t uiBufferQualityIndex = 2;
+    static int32_t uiVideoResolutionIndex = 2;
+    static int32_t uiVideoTypeIndex = 0;
+    static float uiVideoMbps = 1.0f;
     static float uiVideoTime = 5.0f;
     static std::map<std::string, int32_t> uiImages;
 
     std::map<std::string, std::shared_ptr<Image>> usedTextures;
     int currentWidth, currentHeight;
     float bufferScale =
-        1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
+        1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
 
     float now = static_cast<float>(ImGui::GetTime());
 
@@ -449,7 +469,7 @@ void update(void *) {
     const char *uFrameName = nullptr;
     const char *uBackbuffer = nullptr;
 
-    switch (uiPlatform) {
+    switch (uiShaderPlatformIndex) {
         case 0:
             uTimeName = "time";
             uResolutionName = "resolution";
@@ -483,7 +503,7 @@ void update(void *) {
                 readText(program->getFragmentShader().getPath(), text);
                 editor.SetText(text);
             } else {
-                if (uiPlatform == 1) {
+                if (uiShaderPlatformIndex == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 } else {
                     newProgram->setFragmentShaderPreSource(std::string());
@@ -498,7 +518,7 @@ void update(void *) {
     }
 
     if (showTextEditor && editor.IsTextChanged()) {
-        if (uiPlatform == 1) {
+        if (uiShaderPlatformIndex == 1) {
             newProgram->setFragmentShaderPreSource(shaderToyPreSource);
         } else {
             newProgram->setFragmentShaderPreSource(std::string());
@@ -513,8 +533,9 @@ void update(void *) {
     }
 
     const bool *const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2 &mousePos =
-        ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
+    const ImVec2 &mousePos = ImGui::IsMousePosValid() && !isRecording
+                                 ? ImGui::GetMousePos()
+                                 : ImVec2(0.5f, 0.5f);
 
     // onResizeWindow
     if (!isRecording &&
@@ -565,12 +586,12 @@ void update(void *) {
         ImGui::Begin("Shader Editor", &uiDebugWindow,
                      ImGuiWindowFlags_AlwaysAutoResize);
 
-        ImGui::Checkbox("File Window", &uiShaderFileWindow);
-        ImGui::Checkbox("Time Window", &uiTimeWindow);
-        ImGui::Checkbox("Stats Window", &uiStatsWindow);
-        ImGui::Checkbox("Uniforms Window", &uiUniformWindow);
-        ImGui::Checkbox("BackBuffer Window", &uiBackBufferWindow);
-        ImGui::Checkbox("Capture Window", &uiCaptureWindow);
+        ImGui::Checkbox("File", &uiShaderFileWindow);
+        ImGui::Checkbox("Time", &uiTimeWindow);
+        ImGui::Checkbox("Stats", &uiStatsWindow);
+        ImGui::Checkbox("Uniforms", &uiUniformWindow);
+        ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
+        ImGui::Checkbox("Capture", &uiCaptureWindow);
 
         ImGui::Checkbox("Log", &showAppLogWindow);
         ImGui::Checkbox("TextEditor", &showTextEditor);
@@ -585,12 +606,12 @@ void update(void *) {
                          ImGuiWindowFlags_AlwaysAutoResize);
 
             const char *const items[] = {"glslsandbox", "shadertoy"};
-            if (ImGui::Combo("platform", &uiPlatform, items,
+            if (ImGui::Combo("platform", &uiShaderPlatformIndex, items,
                              IM_ARRAYSIZE(items))) {
                 std::shared_ptr<ShaderProgram> newProgram =
                     std::make_shared<ShaderProgram>();
 
-                if (uiPlatform == 1) {
+                if (uiShaderPlatformIndex == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 } else {
                     newProgram->setFragmentShaderPreSource(std::string());
@@ -604,12 +625,12 @@ void update(void *) {
                 swapProgram(newProgram);
             }
 
-            if (ImGui::Combo("File", &uiShader, shaderFileNames,
+            if (ImGui::Combo("File", &uiShaderFileIndex, shaderFileNames,
                              numShaderFileNames)) {
                 std::shared_ptr<ShaderProgram> newProgram =
-                    shaderFiles[uiShader];
+                    shaderFiles[uiShaderFileIndex];
 
-                if (uiPlatform == 1) {
+                if (uiShaderPlatformIndex == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
                 } else {
                     newProgram->setFragmentShaderPreSource(std::string());
@@ -632,7 +653,7 @@ void update(void *) {
                     std::shared_ptr<ShaderProgram> newProgram =
                         std::make_shared<ShaderProgram>();
 
-                    if (uiPlatform == 1) {
+                    if (uiShaderPlatformIndex == 1) {
                         newProgram->setFragmentShaderPreSource(
                             shaderToyPreSource);
                     }
@@ -646,7 +667,7 @@ void update(void *) {
                     shaderFiles.push_back(newProgram);
                     genShaderFileNames();
 
-                    uiShader = numShaderFileNames - 1;
+                    uiShaderFileIndex = numShaderFileNames - 1;
 
                     program.swap(newProgram);
                 }
@@ -679,12 +700,20 @@ void update(void *) {
         if (uiCaptureWindow) {
             ImGui::Begin("Capture", &uiCaptureWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
-            const char *items[] = {"256x144",   "427x240",  "640x360",
-                                   "720x480",   "1280x720", "1920x1080",
-                                   "2560x1440", "3840x2160"};
+            const char *resolutionItems[] = {
+                "256x144",  "427x240",   "640x360",   "720x480",
+                "1280x720", "1920x1080", "2560x1440", "3840x2160"};
 
-            if (ImGui::Combo("resolution", &uiVideoResolution, items,
-                             IM_ARRAYSIZE(items))) {
+            const char *typeItems[] = {"I420", "WebM"};
+
+            ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
+                         IM_ARRAYSIZE(resolutionItems));
+
+            ImGui::Combo("type", &uiVideoTypeIndex, typeItems,
+                         IM_ARRAYSIZE(typeItems));
+
+            if (uiVideoTypeIndex == 1) {
+                ImGui::DragFloat("MBps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
             }
 
             ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
@@ -694,16 +723,36 @@ void update(void *) {
             ss << 30000.0f / 1001.0f << " hz";
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
+            std::string fileName;
+            const char *const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
+            const char *const webmFilter = "Video file (*.webm)\0*.webm\0";
+            const char *filter = nullptr;
+            bool ok = false;
+
             if (ImGui::Button("Save")) {
-                std::string fileName = "video.y4m";
-#if defined(_MSC_VER) || defined(__MINGW32__)
-                if (saveFileDialog(fileName, "Video file (*.y4m)\0*.y4m\0")) {
-#endif
-                    startRecord(fileName, uiVideoResolution, uiTimeValue);
-                    ImGui::OpenPopup("Export Progress");
-#if defined(_MSC_VER) || defined(__MINGW32__)
+                switch (uiVideoTypeIndex) {
+                    case 0: {
+                        fileName = "video.y4m";
+                        filter = y4mFilter;
+                    } break;
+                    case 1: {
+                        fileName = "video.webm";
+                        filter = webmFilter;
+                    } break;
                 }
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+                ok = saveFileDialog(fileName, filter);
+#else
+                ok = true
 #endif
+                if (ok) {
+                    startRecord(fileName, uiVideoTypeIndex,
+                                uiVideoResolutionIndex,
+                                static_cast<int32_t>(uiVideoMbps * 1000.0f),
+                                uiTimeValue);
+                    ImGui::OpenPopup("Export Progress");
+                }
             }
 
             if (ImGui::BeginPopupModal("Export Progress", NULL,
@@ -803,11 +852,12 @@ void update(void *) {
             ImGui::Begin("BackBuffer", &uiBackBufferWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
             const char *const items[] = {"0.5", "1", "2", "4", "8"};
-            if (ImGui::Combo("quality", &uiBufferQuality, items,
+            if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
                              IM_ARRAYSIZE(items))) {
                 // update framebuffers
                 bufferScale =
-                    1.0f / powf(2.0f, static_cast<float>(uiBufferQuality - 1));
+                    1.0f /
+                    powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
                 updateFrameBuffersSize(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
@@ -824,7 +874,8 @@ void update(void *) {
         }
 
         if (showTextEditor) {
-            ShowTextEditor(showTextEditor, uiShader, uiPlatform);
+            ShowTextEditor(showTextEditor, uiShaderFileIndex,
+                           uiShaderPlatformIndex);
         }
 
         if (showAppLogWindow) {
@@ -849,7 +900,7 @@ void update(void *) {
                              glm::vec2(static_cast<GLfloat>(bufferWidth),
                                        static_cast<GLfloat>(bufferHeight)));
 
-    switch (uiPlatform) {
+    switch (uiShaderPlatformIndex) {
         case 0:
             program->setUniformValue(
                 uMouseName, glm::vec2(mousePos.x / windowWidth,
@@ -910,13 +961,21 @@ void update(void *) {
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                      rgbaBuffer);
 
-        writeOneFrame();
+        writeOneFrame(uiVideoTypeIndex);
 
         currentFrame++;
 
         if (uiTimeValue >= uiVideoTime) {
-            fclose(fVideo);
-            fVideo = nullptr;
+            switch (uiVideoTypeIndex) {
+                case 0: {
+                    fclose(fVideo);
+                    fVideo = nullptr;
+                } break;
+                case 1: {
+                    pEncoder->finalize();
+                } break;
+            }
+
             isRecording = false;
         }
     } else {
