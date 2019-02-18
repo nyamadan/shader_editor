@@ -234,8 +234,8 @@ void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
                 } else {
                     std::string path;
 
-                    if (saveFileDialog(path,
-                                       "Shader file (*.glsl)\0*.glsl\0")) {
+                    if (saveFileDialog(path, "Shader file (*.glsl)\0*.glsl\0",
+                                       "glsl")) {
                         std::shared_ptr<ShaderProgram> newProgram =
                             std::make_shared<ShaderProgram>();
 
@@ -415,9 +415,9 @@ void writeOneFrame(const int32_t uiVideoTypeIndex) {
 
     switch (uiVideoTypeIndex) {
         case 0: {
-            libyuv::BGRAToI420(rgbaBuffer - 1, bufferWidth * 4, yBuffer,
-                               yStride, uBuffer, uStride, vBuffer, vStride,
-                               bufferWidth, -bufferHeight);
+            libyuv::ABGRToI420(rgbaBuffer, bufferWidth * 4, yBuffer, yStride,
+                               uBuffer, uStride, vBuffer, vStride, bufferWidth,
+                               -bufferHeight);
 
             fputs("FRAME\n", fVideo);
             fwrite(yuvBuffer, sizeof(uint8_t), ySize + uSize + vSize, fVideo);
@@ -441,8 +441,8 @@ void update(void *) {
     static bool uiCaptureWindow = false;
 
     static bool uiDebugWindow = true;
+    static bool uiShowTextEditor = false;
     static bool showAppLogWindow = false;
-    static bool showTextEditor = false;
 
     static float uiTimeValue = 0;
     static bool uiPlaying = true;
@@ -498,7 +498,7 @@ void update(void *) {
 
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
-            if (showTextEditor) {
+            if (uiShowTextEditor) {
                 std::string text;
                 readText(program->getFragmentShader().getPath(), text);
                 editor.SetText(text);
@@ -517,7 +517,7 @@ void update(void *) {
         lastCheckUpdate = now;
     }
 
-    if (showTextEditor && editor.IsTextChanged()) {
+    if (uiShowTextEditor && editor.IsTextChanged()) {
         if (uiShaderPlatformIndex == 1) {
             newProgram->setFragmentShaderPreSource(shaderToyPreSource);
         } else {
@@ -594,7 +594,6 @@ void update(void *) {
         ImGui::Checkbox("Capture", &uiCaptureWindow);
 
         ImGui::Checkbox("Log", &showAppLogWindow);
-        ImGui::Checkbox("TextEditor", &showTextEditor);
 #ifndef NDEBUG
         ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
 #endif
@@ -674,6 +673,13 @@ void update(void *) {
             }
 #endif
 
+            ImGui::Checkbox("TextEditor", &uiShowTextEditor);
+
+            if (uiShowTextEditor) {
+                ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
+                               uiShaderPlatformIndex);
+            }
+
             ImGui::End();
         }
 
@@ -725,8 +731,11 @@ void update(void *) {
 
             std::string fileName;
             const char *const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
+            const char *const y4mExt = "y4m";
             const char *const webmFilter = "Video file (*.webm)\0*.webm\0";
+            const char *const webmExt = "webm";
             const char *filter = nullptr;
+            const char *ext = nullptr;
             bool ok = false;
 
             if (ImGui::Button("Save")) {
@@ -734,17 +743,19 @@ void update(void *) {
                     case 0: {
                         fileName = "video.y4m";
                         filter = y4mFilter;
+                        ext = y4mExt;
                     } break;
                     case 1: {
                         fileName = "video.webm";
                         filter = webmFilter;
+                        ext = webmExt;
                     } break;
                 }
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
-                ok = saveFileDialog(fileName, filter);
+                ok = saveFileDialog(fileName, filter, ext);
 #else
-                ok = true
+                ok = true;
 #endif
                 if (ok) {
                     startRecord(fileName, uiVideoTypeIndex,
@@ -871,11 +882,6 @@ void update(void *) {
             bufferStringStream << bufferWidth << ", " << bufferHeight;
             ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
             ImGui::End();
-        }
-
-        if (showTextEditor) {
-            ShowTextEditor(showTextEditor, uiShaderFileIndex,
-                           uiShaderPlatformIndex);
         }
 
         if (showAppLogWindow) {
@@ -1177,14 +1183,14 @@ int main(void) {
         update(nullptr);
     }
 
+    deleteImageFileNames();
+    deleteShaderFileNamse();
+
     glfwTerminate();
 #else
     emscripten_set_main_loop_arg(update, nullptr, 0, 0);
     glfwSwapInterval(1);
 #endif
-
-    deleteImageFileNames();
-    deleteShaderFileNamse();
 
     return 0;
 }

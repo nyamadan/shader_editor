@@ -1,8 +1,9 @@
 #pragma once
 
-#include <cstdlib>
-#include <cstring>
 #include <inttypes.h>
+
+#include <string>
+#include <stdio.h>
 
 #include "mkvmuxer.hpp"
 

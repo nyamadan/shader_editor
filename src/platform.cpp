@@ -34,13 +34,14 @@ bool openFileDialog(std::string &path, const char *const filter) {
 #endif
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
-bool saveFileDialog(std::string &path, const char *const filter) {
+bool saveFileDialog(std::string &path, const char *const filter, const char *const defExt) {
     OPENFILENAMEA ofn;
     char szFile[MAX_PATH + 1] = "";
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(OPENFILENAME);
     ofn.lpstrFilter = filter;
     ofn.lpstrFile = szFile;
+    ofn.lpstrDefExt = defExt;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_OVERWRITEPROMPT;
 
@@ -56,7 +57,7 @@ bool saveFileDialog(std::string &path, const char *const filter) {
     return result;
 }
 #else
-bool saveFileDialog(std::string &path, const char *const filter) {
+bool saveFileDialog(std::string &path, const char *const filter, const char *const defExt) {
     return false;
 }
 #endif

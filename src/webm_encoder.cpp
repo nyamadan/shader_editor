@@ -180,15 +180,10 @@ bool WebmEncoder::InitImageBuffer() {
 
 bool WebmEncoder::RGBAtoVPXImage(const uint8_t *rgba) {
     clear_image(img);
-    // litten endian BGRA means it is ARGB in memory
-    if (libyuv::BGRAToI420(
-            // Since we are ignoring opacity anyways (currently), we can use
-            // this nasty nasty trick to avoid reshuffling the entire memory
-            // from RGBA to ARGB.
-            rgba - 1, cfg.g_w * 4, img->planes[VPX_PLANE_Y],
-            img->stride[VPX_PLANE_Y], img->planes[VPX_PLANE_U],
-            img->stride[VPX_PLANE_U], img->planes[VPX_PLANE_V],
-            img->stride[VPX_PLANE_V], cfg.g_w, -cfg.g_h) != 0) {
+    if (libyuv::ABGRToI420(rgba, cfg.g_w * 4, img->planes[VPX_PLANE_Y],
+                           img->stride[VPX_PLANE_Y], img->planes[VPX_PLANE_U],
+                           img->stride[VPX_PLANE_U], img->planes[VPX_PLANE_V],
+                           img->stride[VPX_PLANE_V], cfg.g_w, -cfg.g_h) != 0) {
         last_error = "Could not convert to I420";
         return false;
     }
