@@ -530,6 +530,8 @@ void update(void *) {
 
     if (newProgram->isOK()) {
         swapProgram(newProgram);
+
+        shaderFiles[uiShaderFileIndex] = program;
     }
 
     const bool *const mouseDown = ImGui::GetIO().MouseDown;
