@@ -54,11 +54,12 @@ GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
 
+GLuint pixelBuffer;
+
 const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
 
-uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 int64_t currentFrame = 0;
 bool isRecording = false;
@@ -177,6 +178,11 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
+    glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
+                 GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
     for (int32_t i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
 
@@ -197,16 +203,15 @@ void updateFrameBuffersSize(GLint width, GLint height) {
 
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                GL_TEXTURE_2D, backBuffers[i], 0);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    if (rgbaBuffer != nullptr) {
-        delete[] rgbaBuffer;
-    }
     if (yuvBuffer != nullptr) {
         delete[] yuvBuffer;
     }
-
-    rgbaBuffer = new uint8_t[bufferWidth * bufferHeight * 4];
 
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
@@ -400,7 +405,7 @@ void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
     }
 }
 
-void writeOneFrame(const int32_t uiVideoTypeIndex) {
+void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex, unsigned long encodeDeadline) {
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
     const int32_t vSize = uSize;
@@ -423,7 +428,7 @@ void writeOneFrame(const int32_t uiVideoTypeIndex) {
             fwrite(yuvBuffer, sizeof(uint8_t), ySize + uSize + vSize, fVideo);
         } break;
         case 1: {
-            pEncoder->addRGBAFrame(rgbaBuffer);
+            pEncoder->addRGBAFrame(rgbaBuffer, encodeDeadline);
         } break;
     }
 }
@@ -452,6 +457,7 @@ void update(void *) {
     static int32_t uiBufferQualityIndex = 2;
     static int32_t uiVideoResolutionIndex = 2;
     static int32_t uiVideoTypeIndex = 0;
+    static int32_t uiVideoQualityIndex = 1;
     static float uiVideoMbps = 1.0f;
     static float uiVideoTime = 5.0f;
     static std::map<std::string, int32_t> uiImages;
@@ -462,6 +468,7 @@ void update(void *) {
         1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
 
     float now = static_cast<float>(ImGui::GetTime());
+    unsigned long encodeDeadline = VPX_DL_GOOD_QUALITY;
 
     const char *uMouseName = nullptr;
     const char *uResolutionName = nullptr;
@@ -717,10 +724,27 @@ void update(void *) {
             ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
                          IM_ARRAYSIZE(resolutionItems));
 
-            ImGui::Combo("type", &uiVideoTypeIndex, typeItems,
+            ImGui::Combo("format", &uiVideoTypeIndex, typeItems,
                          IM_ARRAYSIZE(typeItems));
 
             if (uiVideoTypeIndex == 1) {
+                const char *qualityItems[] = {"fast", "good", "best"};
+
+                ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
+                             IM_ARRAYSIZE(qualityItems));
+
+                switch (uiVideoQualityIndex) {
+                case 0:
+                    encodeDeadline = VPX_DL_REALTIME;
+                    break;
+                case 1:
+                    encodeDeadline = VPX_DL_GOOD_QUALITY;
+                    break;
+                case 2:
+                    encodeDeadline = VPX_DL_BEST_QUALITY;
+                    break;
+                }
+
                 ImGui::DragFloat("MBps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
             }
 
@@ -966,10 +990,19 @@ void update(void *) {
     }
 
     if (isRecording) {
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
-                     rgbaBuffer);
+                     0);
+        auto *ptr = static_cast<const uint8_t const *>(
+            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 
-        writeOneFrame(uiVideoTypeIndex);
+        if (ptr != nullptr) {
+            writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+            ptr = nullptr;
+        }
+
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
         currentFrame++;
 
@@ -980,7 +1013,7 @@ void update(void *) {
                     fVideo = nullptr;
                 } break;
                 case 1: {
-                    pEncoder->finalize();
+                    pEncoder->finalize(encodeDeadline);
                 } break;
             }
 
@@ -1137,6 +1170,7 @@ int main(void) {
     glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
     glGenBuffers(1, &vPosition);
+    glGenBuffers(1, &pixelBuffer);
 
     glBindVertexArray(vertexArraysObject);
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
