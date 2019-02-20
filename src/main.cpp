@@ -54,6 +54,8 @@ GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
 
+GLuint pixelBuffer;
+
 const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
@@ -177,6 +179,11 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pixelBuffer);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
+                 GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
     for (int32_t i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
 
@@ -197,11 +204,16 @@ void updateFrameBuffersSize(GLint width, GLint height) {
 
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                GL_TEXTURE_2D, backBuffers[i], 0);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     if (rgbaBuffer != nullptr) {
         delete[] rgbaBuffer;
     }
+
     if (yuvBuffer != nullptr) {
         delete[] yuvBuffer;
     }
@@ -1137,6 +1149,7 @@ int main(void) {
     glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
     glGenBuffers(1, &vPosition);
+    glGenBuffers(1, &pixelBuffer);
 
     glBindVertexArray(vertexArraysObject);
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
