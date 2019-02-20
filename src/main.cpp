@@ -60,7 +60,6 @@ const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
 
-uint8_t *rgbaBuffer = nullptr;
 uint8_t *yuvBuffer = nullptr;
 int64_t currentFrame = 0;
 bool isRecording = false;
@@ -179,10 +178,10 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pixelBuffer);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
+    glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
                  GL_STREAM_READ);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
     for (int32_t i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
@@ -210,15 +209,9 @@ void updateFrameBuffersSize(GLint width, GLint height) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    if (rgbaBuffer != nullptr) {
-        delete[] rgbaBuffer;
-    }
-
     if (yuvBuffer != nullptr) {
         delete[] yuvBuffer;
     }
-
-    rgbaBuffer = new uint8_t[bufferWidth * bufferHeight * 4];
 
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
@@ -412,7 +405,7 @@ void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
     }
 }
 
-void writeOneFrame(const int32_t uiVideoTypeIndex) {
+void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex) {
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
     const int32_t vSize = uSize;
@@ -973,15 +966,23 @@ void update(void *) {
 
         program->applyUniforms();
 
+        if (isRecording) {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
+        }
+
         glBindVertexArray(vertexArraysObject);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
     }
 
     if (isRecording) {
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
-                     rgbaBuffer);
-
-        writeOneFrame(uiVideoTypeIndex);
+                     0);
+        auto ptr = static_cast<uint8_t *>(
+            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+        writeOneFrame(ptr, uiVideoTypeIndex);
+        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        ptr = nullptr;
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
         currentFrame++;
 
