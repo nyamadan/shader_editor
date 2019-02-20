@@ -18,8 +18,8 @@ class WebmEncoder {
     WebmEncoder(const std::string &file, int timebase_num, int timebase_den,
                 unsigned int width, unsigned int height, unsigned int bitrate);
     ~WebmEncoder();
-    bool addRGBAFrame(const uint8_t *rgba);
-    bool finalize();
+    bool addRGBAFrame(const uint8_t *rgba, unsigned long deadline);
+    bool finalize(unsigned long deadline);
     std::string lastError();
 
    private:
@@ -29,7 +29,7 @@ class WebmEncoder {
     bool InitImageBuffer();
 
     bool RGBAtoVPXImage(const uint8_t *data);
-    bool EncodeFrame(vpx_image_t *img);
+    bool EncodeFrame(vpx_image_t *img, unsigned long deadline);
 
     vpx_codec_ctx_t ctx;
     unsigned int frame_cnt = 0;

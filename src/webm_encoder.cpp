@@ -54,16 +54,16 @@ WebmEncoder::~WebmEncoder() {
     delete mkv_writer;
 }
 
-bool WebmEncoder::addRGBAFrame(const uint8_t *rgba) {
+bool WebmEncoder::addRGBAFrame(const uint8_t *rgba, unsigned long deadline) {
     RGBAtoVPXImage(rgba);
-    if (!EncodeFrame(img)) {
+    if (!EncodeFrame(img, deadline)) {
         return false;
     }
     return true;
 }
 
-bool WebmEncoder::finalize() {
-    if (!EncodeFrame(NULL)) {
+bool WebmEncoder::finalize(unsigned long deadline) {
+    if (!EncodeFrame(NULL, deadline)) {
         last_error = "Could not encode flush frame";
         return false;
     }
@@ -78,7 +78,7 @@ bool WebmEncoder::finalize() {
 
 std::string WebmEncoder::lastError() { return std::string(last_error); }
 
-bool WebmEncoder::EncodeFrame(vpx_image_t *img) {
+bool WebmEncoder::EncodeFrame(vpx_image_t *img, unsigned long deadline) {
     vpx_codec_iter_t iter = NULL;
     const vpx_codec_cx_pkt_t *pkt;
     vpx_codec_err_t err;
@@ -87,7 +87,7 @@ bool WebmEncoder::EncodeFrame(vpx_image_t *img) {
         &ctx, img, frame_cnt, /* time of frame */
         1,                    /* length of frame */
         0, /* flags. Use VPX_EFLAG_FORCE_KF to force a keyframe. */
-        VPX_DL_BEST_QUALITY);
+        deadline);
     frame_cnt++;
     if (err != VPX_CODEC_OK) {
         last_error = std::string(vpx_codec_err_to_string(err));
