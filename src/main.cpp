@@ -54,7 +54,7 @@ GLuint frameBuffers[2];
 GLuint depthBuffers[2];
 GLuint backBuffers[2];
 
-GLuint pixelBuffer;
+GLuint pixelBuffers[2];
 
 const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
@@ -178,14 +178,8 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     bufferWidth = width;
     bufferHeight = height;
 
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
-    glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
-                 GL_STREAM_READ);
-    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
     for (int32_t i = 0; i < 2; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
-
         glBindRenderbuffer(GL_RENDERBUFFER, depthBuffers[i]);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
                               bufferWidth, bufferHeight);
@@ -207,6 +201,11 @@ void updateFrameBuffersSize(GLint width, GLint height) {
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[i]);
+        glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
+                     GL_STREAM_READ);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     }
 
     if (yuvBuffer != nullptr) {
@@ -993,19 +992,22 @@ void update(void *) {
         double t0;
 
         t0 = glfwGetTime();
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffer);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE, 0);
         std::cout << "glReadPixels: " << (glfwGetTime() - t0) << std::endl;
 
-        t0 = glfwGetTime();
-        auto *ptr = static_cast<const uint8_t const *>(
-            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-        std::cout << "glMapBuffer: " << (glfwGetTime() - t0) << std::endl;
+        if (currentFrame > 0) {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
+            t0 = glfwGetTime();
+            auto *ptr = static_cast<const uint8_t const *>(
+                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            std::cout << "glMapBuffer: " << (glfwGetTime() - t0) << std::endl;
 
-        if (ptr != nullptr) {
-            writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
-            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-            ptr = nullptr;
+            if (ptr != nullptr) {
+                writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+                ptr = nullptr;
+            }
         }
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1013,6 +1015,20 @@ void update(void *) {
         currentFrame++;
 
         if (uiTimeValue >= uiVideoTime) {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
+            t0 = glfwGetTime();
+            auto *ptr = static_cast<const uint8_t const *>(
+                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            std::cout << "glMapBuffer: " << (glfwGetTime() - t0) << std::endl;
+
+            if (ptr != nullptr) {
+                writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+                ptr = nullptr;
+            }
+
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
             switch (uiVideoTypeIndex) {
                 case 0: {
                     fclose(fVideo);
@@ -1176,7 +1192,6 @@ int main(void) {
     glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
     glGenBuffers(1, &vPosition);
-    glGenBuffers(1, &pixelBuffer);
 
     glBindVertexArray(vertexArraysObject);
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
@@ -1195,6 +1210,7 @@ int main(void) {
     glGenFramebuffers(2, frameBuffers);
     glGenRenderbuffers(2, depthBuffers);
     glGenTextures(2, backBuffers);
+    glGenBuffers(2, pixelBuffers);
 
     updateFrameBuffersSize(windowWidth / 2, windowHeight / 2);
 
