@@ -989,19 +989,13 @@ void update(void *) {
     }
 
     if (isRecording) {
-        double t0;
-
-        t0 = glfwGetTime();
         glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
         glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-        std::cout << "glReadPixels: " << (glfwGetTime() - t0) << std::endl;
 
         if (currentFrame > 0) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
-            t0 = glfwGetTime();
             auto *ptr = static_cast<const uint8_t const *>(
                 glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-            std::cout << "glMapBuffer: " << (glfwGetTime() - t0) << std::endl;
 
             if (ptr != nullptr) {
                 writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
