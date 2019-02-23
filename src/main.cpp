@@ -1,6 +1,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <iomanip>
 #include <algorithm>
 #include <memory>
 
@@ -404,7 +405,8 @@ void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
     }
 }
 
-void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex, unsigned long encodeDeadline) {
+void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex,
+                   unsigned long encodeDeadline) {
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
     const int32_t vSize = uSize;
@@ -446,6 +448,7 @@ void update(void *) {
 
     static bool uiDebugWindow = true;
     static bool uiShowTextEditor = false;
+    static bool uiErrorWindow = false;
     static bool uiAppLogWindow = false;
 
     static float uiTimeValue = 0;
@@ -459,7 +462,8 @@ void update(void *) {
     static int32_t uiVideoQualityIndex = 1;
     static float uiVideoMbps = 1.0f;
     static float uiVideoTime = 5.0f;
-    static std::map<std::string, int32_t> uiImages;
+    static std::map<std::string, int32_t> uiImageFileNames;
+    static std::map<int32_t, std::string> programErrors;
 
     std::map<std::string, std::shared_ptr<Image>> usedTextures;
     int currentWidth, currentHeight;
@@ -515,8 +519,8 @@ void update(void *) {
                     newProgram->setFragmentShaderPreSource(std::string());
                 }
                 recompileShaderFromFile(program, newProgram);
-                editor.SetErrorMarkers(
-                    newProgram->getFragmentShader().getErrors());
+                programErrors = newProgram->getFragmentShader().getErrors();
+                editor.SetErrorMarkers(programErrors);
             }
         }
 
@@ -531,7 +535,8 @@ void update(void *) {
         }
 
         recompileFragmentShader(program, newProgram, editor.GetText());
-        editor.SetErrorMarkers(newProgram->getFragmentShader().getErrors());
+        programErrors = newProgram->getFragmentShader().getErrors();
+        editor.SetErrorMarkers(programErrors);
     }
 
     if (newProgram->isOK()) {
@@ -575,7 +580,7 @@ void update(void *) {
             ShaderUniform &u = it->second;
 
             if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
-                int32_t &uiImage = uiImages[u.name];
+                int32_t &uiImage = uiImageFileNames[u.name];
 
                 if (uiImage < 0 || uiImage >= numImageFileNames) {
                     uiImage = 0;
@@ -600,6 +605,7 @@ void update(void *) {
         ImGui::Checkbox("Uniforms", &uiUniformWindow);
         ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
         ImGui::Checkbox("Capture", &uiCaptureWindow);
+        ImGui::Checkbox("Errors", &uiErrorWindow);
 
         ImGui::Checkbox("Log", &uiAppLogWindow);
 #ifndef NDEBUG
@@ -626,8 +632,8 @@ void update(void *) {
 
                 recompileFragmentShader(program, newProgram, editor.GetText());
 
-                editor.SetErrorMarkers(
-                    newProgram->getFragmentShader().getErrors());
+                programErrors = newProgram->getFragmentShader().getErrors();
+                editor.SetErrorMarkers(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -646,8 +652,8 @@ void update(void *) {
                 newProgram->compile();
 
                 editor.SetText(newProgram->getFragmentShader().getSource());
-                editor.SetErrorMarkers(
-                    newProgram->getFragmentShader().getErrors());
+                programErrors = newProgram->getFragmentShader().getErrors();
+                editor.SetErrorMarkers(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -668,8 +674,8 @@ void update(void *) {
                     compileShaderFromFile(
                         newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
-                    editor.SetErrorMarkers(
-                        newProgram->getFragmentShader().getErrors());
+                    programErrors = newProgram->getFragmentShader().getErrors();
+                    editor.SetErrorMarkers(programErrors);
 
                     shaderFiles.push_back(newProgram);
                     genShaderFileNames();
@@ -733,15 +739,15 @@ void update(void *) {
                              IM_ARRAYSIZE(qualityItems));
 
                 switch (uiVideoQualityIndex) {
-                case 0:
-                    encodeDeadline = VPX_DL_REALTIME;
-                    break;
-                case 1:
-                    encodeDeadline = VPX_DL_GOOD_QUALITY;
-                    break;
-                case 2:
-                    encodeDeadline = VPX_DL_BEST_QUALITY;
-                    break;
+                    case 0:
+                        encodeDeadline = VPX_DL_REALTIME;
+                        break;
+                    case 1:
+                        encodeDeadline = VPX_DL_GOOD_QUALITY;
+                        break;
+                    case 2:
+                        encodeDeadline = VPX_DL_BEST_QUALITY;
+                        break;
                 }
 
                 ImGui::DragFloat("Mbps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
@@ -856,7 +862,7 @@ void update(void *) {
                         break;
                     case UniformType::Sampler2D:
                         if (numImageFileNames > 0) {
-                            int32_t &uiImage = uiImages[u.name];
+                            int32_t &uiImage = uiImageFileNames[u.name];
 
                             if (ImGui::Combo(u.name.c_str(), &uiImage,
                                              imageFileNames,
@@ -906,6 +912,29 @@ void update(void *) {
             std::stringstream bufferStringStream;
             bufferStringStream << bufferWidth << ", " << bufferHeight;
             ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
+            ImGui::End();
+        }
+
+        if (uiErrorWindow) {
+            ImGui::Begin("Errors", &uiErrorWindow);
+            ImGui::SetWindowSize(ImVec2(800, 80), ImGuiCond_FirstUseEver);
+
+            for (auto iter = programErrors.begin(); iter != programErrors.end();
+                 iter++) {
+                const auto &line = iter->first;
+                const auto &message = iter->second;
+                std::stringstream ss;
+                ss << std::setw(4) << std::setfill('0') << line << ": "
+                   << message;
+                bool selected = false;
+                if (ImGui::Selectable(ss.str().c_str(), selected)) {
+                    TextEditor::Coordinates cursor;
+                    cursor.mColumn = 0;
+                    cursor.mLine = line - 1;
+                    editor.SetCursorPosition(cursor);
+                }
+            }
+
             ImGui::End();
         }
 
@@ -990,7 +1019,8 @@ void update(void *) {
 
     if (isRecording) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
+                     0);
 
         if (currentFrame > 0) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);

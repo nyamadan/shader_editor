@@ -13,7 +13,7 @@ class Shader {
     std::string path = "(empty)";
     std::string source = "";
     std::string preSource = "";
-    std::map<int, std::string> errors;
+    std::map<int32_t, std::string> errors;
     bool ok = false;
     int64_t mTime = 0;
 
@@ -23,7 +23,7 @@ class Shader {
     Shader() {}
     ~Shader() { reset(); }
     const std::string &getSource() const { return source; }
-    const std::map<int, std::string> &getErrors() const { return errors; }
+    const std::map<int32_t, std::string> &getErrors() const { return errors; }
     const std::string &getPath() const { return path; }
     const std::string &getPreSource() const { return preSource; }
     bool isOK() const { return ok; }
