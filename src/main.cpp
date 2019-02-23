@@ -1078,6 +1078,13 @@ void update(void *) {
                 } break;
             }
 
+            bufferScale =
+                1.0f /
+                powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
+            updateFrameBuffersSize(
+                static_cast<GLint>(currentWidth * bufferScale),
+                static_cast<GLint>(currentHeight * bufferScale));
+
             isRecording = false;
         }
     } else {
