@@ -58,7 +58,8 @@ if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
     set(CMAKE_EXE_LINKER_FLAGS "--embed-file ${PROJECT_SOURCE_DIR}/default@default --embed-file ${PROJECT_SOURCE_DIR}/assets@assets --no-heap-copy -s USE_WEBGL2=1 -s USE_GLFW=3 -s WASM=1 -s ALLOW_MEMORY_GROWTH=1")
 
-    set(LIB_VPX ${PROJECT_SOURCE_DIR}/lib/emscripten/libvpx.a)
+    # VPX
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx.a)
 
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES})
     add_dependencies(shader_editor webm yuv)
@@ -82,11 +83,7 @@ elseif(MSVC)
     include_directories(./glfw/include)
 
     # VPX
-    if (${CMAKE_BUILD_TYPE} MATCHES Release)
-    set(LIB_VPX ${PROJECT_SOURCE_DIR}/lib/msvc/vpxmd.lib)
-    else()
-    set(LIB_VPX ${PROJECT_SOURCE_DIR}/lib/msvc/vpxmdd.lib)
-    endif()
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
@@ -106,10 +103,12 @@ else()
     # GLFW
     add_subdirectory(./glfw)
     include_directories(./glfw/include)
-    include_directories(${CMAKE_CURRENT_BINARY_DIR}/glfw/src)
+
+    # VPX
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx.a)
 
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
-    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} glfw)
+    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} ${LIB_VPX} glfw)
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
