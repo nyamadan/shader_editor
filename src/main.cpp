@@ -446,7 +446,7 @@ void update(void *) {
 
     static bool uiDebugWindow = true;
     static bool uiShowTextEditor = false;
-    static bool showAppLogWindow = false;
+    static bool uiAppLogWindow = false;
 
     static float uiTimeValue = 0;
     static bool uiPlaying = true;
@@ -601,7 +601,7 @@ void update(void *) {
         ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
         ImGui::Checkbox("Capture", &uiCaptureWindow);
 
-        ImGui::Checkbox("Log", &showAppLogWindow);
+        ImGui::Checkbox("Log", &uiAppLogWindow);
 #ifndef NDEBUG
         ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
 #endif
@@ -909,8 +909,8 @@ void update(void *) {
             ImGui::End();
         }
 
-        if (showAppLogWindow) {
-            AppLog::getInstance().showAppLogWindow(showAppLogWindow);
+        if (uiAppLogWindow) {
+            AppLog::getInstance().showAppLogWindow(uiAppLogWindow);
         }
 
 #ifndef NDEBUG
@@ -1010,10 +1010,8 @@ void update(void *) {
 
         if (uiTimeValue >= uiVideoTime) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-            t0 = glfwGetTime();
             auto *ptr = static_cast<const uint8_t const *>(
                 glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-            std::cout << "glMapBuffer: " << (glfwGetTime() - t0) << std::endl;
 
             if (ptr != nullptr) {
                 writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
