@@ -18,7 +18,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#define GLFW_INCLUDE_ES3
+#define GLFW_INCLUDE_ES31
 #include <GLFW/glfw3.h>
 #else
 #include <GL/gl3w.h>

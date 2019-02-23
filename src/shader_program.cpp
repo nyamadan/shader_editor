@@ -133,6 +133,10 @@ bool Shader::checkExpiredWithReset() {
 void ShaderProgram::attribute(const std::string &name, GLint size, GLenum type,
                               GLboolean normalized, GLsizei stride,
                               const void *pointer) {
+    if (!isOK()) {
+        return;
+    }
+
     int32_t location = glGetAttribLocation(program, name.c_str());
     attribute(name, location, size, type, normalized, stride, pointer);
 }
@@ -175,18 +179,21 @@ void ShaderProgram::applyAttributes() {
     }
 }
 
-GLint ShaderProgram::uniform(const std::string &name, UniformType type) {
+void ShaderProgram::uniform(const std::string &name, UniformType type) {
+    if (!isOK()) {
+        return;
+    }
+
     int32_t location = glGetUniformLocation(program, name.c_str());
-    return uniform(name, location, type);
+    uniform(name, location, type);
 }
 
-GLint ShaderProgram::uniform(const std::string &name, GLint location,
+void ShaderProgram::uniform(const std::string &name, GLint location,
                              UniformType type) {
     ShaderUniform &u = uniforms[name];
     u.name = name;
     u.location = location;
     u.type = type;
-    return location;
 }
 
 void ShaderProgram::setUniformInteger(const std::string &name, int value) {
@@ -390,11 +397,12 @@ GLuint ShaderProgram::compile() {
         return 0;
     }
 
+    ok = true;
+
     loadAttributes();
     loadUniforms();
 
     compileTime = glfwGetTime() - t0;
-    ok = true;
 
     AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
                                  vertexShader.getPath().c_str(),
@@ -480,7 +488,7 @@ void ShaderProgram::loadAttributes() {
 
     for (int i = 0; i < count; i++) {
         const GLsizei bufSize = 128;
-        GLchar name[bufSize];
+        GLchar name[bufSize + 1] = { 0 };
         GLsizei length;
         GLint size;
         GLenum type;

@@ -520,6 +520,7 @@ void update(void *) {
                 }
                 recompileShaderFromFile(program, newProgram);
                 programErrors = newProgram->getFragmentShader().getErrors();
+                shaderFiles[uiShaderFileIndex] = newProgram;
                 editor.SetErrorMarkers(programErrors);
             }
         }
@@ -536,19 +537,17 @@ void update(void *) {
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
+        shaderFiles[uiShaderFileIndex] = newProgram;
         editor.SetErrorMarkers(programErrors);
     }
 
     if (newProgram->isOK()) {
         swapProgram(newProgram);
-
-        shaderFiles[uiShaderFileIndex] = program;
     }
 
     const bool *const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2 &mousePos = ImGui::IsMousePosValid() && !isRecording
-                                 ? ImGui::GetMousePos()
-                                 : ImVec2(0.5f, 0.5f);
+    const ImVec2 &mousePos =
+        ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
 
     // onResizeWindow
     if (!isRecording &&
@@ -633,6 +632,7 @@ void update(void *) {
                 recompileFragmentShader(program, newProgram, editor.GetText());
 
                 programErrors = newProgram->getFragmentShader().getErrors();
+                shaderFiles[uiShaderFileIndex] = newProgram;
                 editor.SetErrorMarkers(programErrors);
 
                 swapProgram(newProgram);
@@ -652,7 +652,9 @@ void update(void *) {
                 newProgram->compile();
 
                 editor.SetText(newProgram->getFragmentShader().getSource());
+
                 programErrors = newProgram->getFragmentShader().getErrors();
+                shaderFiles[uiShaderFileIndex] = newProgram;
                 editor.SetErrorMarkers(programErrors);
 
                 swapProgram(newProgram);
@@ -675,6 +677,7 @@ void update(void *) {
                         newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
                     programErrors = newProgram->getFragmentShader().getErrors();
+                    shaderFiles[uiShaderFileIndex] = newProgram;
                     editor.SetErrorMarkers(programErrors);
 
                     shaderFiles.push_back(newProgram);
@@ -962,25 +965,37 @@ void update(void *) {
 
     switch (uiShaderPlatformIndex) {
         case 0:
-            program->setUniformValue(
-                uMouseName, glm::vec2(mousePos.x / windowWidth,
-                                      1.0f - mousePos.y / windowHeight));
+            if (isRecording) {
+                program->setUniformValue(uMouseName, glm::vec2(0.5f, 0.5f));
+            } else {
+                program->setUniformValue(
+                    uMouseName, glm::vec2(mousePos.x / windowWidth,
+                                          1.0f - mousePos.y / windowHeight));
+            }
             break;
         case 1:
             program->setUniformValue(uFrameName,
                                      static_cast<int>(currentFrame));
-            if (mouseDown[0] || mouseDown[1]) {
+
+            if (isRecording) {
                 program->setUniformValue(
-                    uMouseName, glm::vec4(mousePos.x, windowHeight - mousePos.y,
-                                          mouseDown[0] ? 1.0f : 0.0f,
-                                          mouseDown[1] ? 1.0f : 0.0f));
+                    uMouseName, glm::vec4(0.5f * windowWidth,
+                                          0.5f * windowHeight, 0.0f, 0.0f));
             } else {
-                if (program->containsUniform(uMouseName)) {
-                    const glm::vec4 &prevMousePos =
-                        program->getUniform(uMouseName).value.vec4;
+                if (mouseDown[0] || mouseDown[1]) {
                     program->setUniformValue(
                         uMouseName,
-                        glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
+                        glm::vec4(mousePos.x, windowHeight - mousePos.y,
+                                  mouseDown[0] ? 1.0f : 0.0f,
+                                  mouseDown[1] ? 1.0f : 0.0f));
+                } else {
+                    if (program->containsUniform(uMouseName)) {
+                        const glm::vec4 &prevMousePos =
+                            program->getUniform(uMouseName).value.vec4;
+                        program->setUniformValue(
+                            uMouseName,
+                            glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
+                    }
                 }
             }
             break;
@@ -1024,8 +1039,9 @@ void update(void *) {
 
         if (currentFrame > 0) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
-            auto *ptr = static_cast<const uint8_t const *>(
-                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            auto *ptr = static_cast<const uint8_t const *>(glMapBufferRange(
+                GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
+                GL_MAP_READ_BIT));
 
             if (ptr != nullptr) {
                 writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
@@ -1040,8 +1056,9 @@ void update(void *) {
 
         if (uiTimeValue >= uiVideoTime) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-            auto *ptr = static_cast<const uint8_t const *>(
-                glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+            auto *ptr = static_cast<const uint8_t const *>(glMapBufferRange(
+                GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
+                GL_MAP_READ_BIT));
 
             if (ptr != nullptr) {
                 writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);

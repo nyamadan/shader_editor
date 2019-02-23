@@ -99,8 +99,8 @@ class ShaderProgram {
 
     void attribute(const std::string &name, GLint size, GLenum type,
                    GLboolean normalized, GLsizei stride, const void *pointer);
-    GLint uniform(const std::string &name, UniformType type);
-    GLint uniform(const std::string &name, GLint location, UniformType type);
+    void uniform(const std::string &name, UniformType type);
+    void uniform(const std::string &name, GLint location, UniformType type);
     void link();
     void setUniformInteger(const std::string &name, int value);
     void setUniformFloat(const std::string &name, float value);
