@@ -83,11 +83,7 @@ bool WebmEncoder::EncodeFrame(vpx_image_t *img, unsigned long deadline) {
     const vpx_codec_cx_pkt_t *pkt;
     vpx_codec_err_t err;
 
-    err = vpx_codec_encode(
-        &ctx, img, frame_cnt, /* time of frame */
-        1,                    /* length of frame */
-        0, /* flags. Use VPX_EFLAG_FORCE_KF to force a keyframe. */
-        deadline);
+    err = vpx_codec_encode(&ctx, img, frame_cnt, 1, 0, deadline);
     frame_cnt++;
     if (err != VPX_CODEC_OK) {
         last_error = std::string(vpx_codec_err_to_string(err));
@@ -128,15 +124,13 @@ bool WebmEncoder::InitCodec(int timebase_num, int timebase_den,
         last_error = std::string(vpx_codec_err_to_string(err));
         return false;
     }
-
     cfg.g_timebase.num = timebase_num;
     cfg.g_timebase.den = timebase_den;
     cfg.g_w = width;
     cfg.g_h = height;
     cfg.rc_target_bitrate = bitrate;
 
-    err = vpx_codec_enc_init(&ctx, iface, &cfg, 0 /* flags */
-    );
+    err = vpx_codec_enc_init(&ctx, iface, &cfg, 0);
     if (err != VPX_CODEC_OK) {
         last_error = std::string(vpx_codec_err_to_string(err));
         return false;
@@ -152,25 +146,16 @@ bool WebmEncoder::InitMkvWriter(const std::string &file) {
         last_error = "Could not initialize main segment";
         return false;
     }
-    if (main_segment->AddVideoTrack(cfg.g_w, cfg.g_h, 1 /* track id */) == 0) {
+    if (main_segment->AddVideoTrack(cfg.g_w, cfg.g_h, 1) == 0) {
         last_error = "Could not add video track";
         return false;
     }
     main_segment->set_mode(Segment::Mode::kFile);
-    auto info = main_segment->GetSegmentInfo();
-    // Branding, yo
-    auto muxing_app = std::string(info->muxing_app()) + " but in wasm";
-    auto writing_app = std::string(info->writing_app()) + " but in wasm";
-    info->set_writing_app(writing_app.c_str());
-    info->set_muxing_app(muxing_app.c_str());
     return true;
 }
 
 bool WebmEncoder::InitImageBuffer() {
-    img = vpx_img_alloc(NULL, /* allocate buffer on the heap */
-                        VPX_IMG_FMT_I420, cfg.g_w, cfg.g_h,
-                        0 /* align. simple_encoder says 1? */
-    );
+    img = vpx_img_alloc(NULL, VPX_IMG_FMT_I420, cfg.g_w, cfg.g_h, 0);
     if (img == NULL) {
         last_error = "Could not allocate vpx image buffer";
         return false;

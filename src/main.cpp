@@ -595,7 +595,7 @@ void update(void *) {
     }
 
     if (uiDebugWindow) {
-        ImGui::Begin("Shader Editor", &uiDebugWindow,
+        ImGui::Begin("Control", &uiDebugWindow,
                      ImGuiWindowFlags_AlwaysAutoResize);
 
         ImGui::Checkbox("File", &uiShaderFileWindow);
@@ -605,8 +605,8 @@ void update(void *) {
         ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
         ImGui::Checkbox("Capture", &uiCaptureWindow);
         ImGui::Checkbox("Errors", &uiErrorWindow);
-
         ImGui::Checkbox("Log", &uiAppLogWindow);
+
 #ifndef NDEBUG
         ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
 #endif
@@ -1079,8 +1079,7 @@ void update(void *) {
             }
 
             bufferScale =
-                1.0f /
-                powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
+                1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
             updateFrameBuffersSize(
                 static_cast<GLint>(currentWidth * bufferScale),
                 static_cast<GLint>(currentHeight * bufferScale));
@@ -1162,6 +1161,35 @@ void loadFiles(const std::string &path) {
         }
     }
 }
+
+#ifndef __EMSCRIPTEN__
+
+void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
+                   GLsizei length, const GLchar *message,
+                   const void *user_param) {
+    switch (severity) {
+        case GL_DEBUG_SEVERITY_NOTIFICATION:
+            break;
+        case GL_DEBUG_SEVERITY_LOW:
+        case GL_DEBUG_SEVERITY_MEDIUM:
+        case GL_DEBUG_SEVERITY_HIGH:
+            AppLog::getInstance().addLog("ERROR(%X): %s\n", eid, message);
+            break;
+    }
+}
+
+void EnableOpenGLDebugExtention() {
+    GLint flags;
+    glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+    if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(glDebugOutput, nullptr);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0,
+                              nullptr, GL_TRUE);
+    }
+}
+#endif
 }  // namespace
 
 int main(void) {
@@ -1202,6 +1230,11 @@ int main(void) {
     if (gl3wInit() != 0) {
         return 1;
     }
+
+#ifndef NDEBUG
+    EnableOpenGLDebugExtention();
+#endif
+
 #endif
 
     ImGui::SetCurrentContext(ImGui::CreateContext());
