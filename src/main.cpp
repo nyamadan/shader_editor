@@ -727,6 +727,7 @@ void update(void *) {
                 "256x144",  "427x240",   "640x360",   "720x480",
                 "1280x720", "1920x1080", "2560x1440", "3840x2160"};
 
+            // TODO: OpenH264
             const char *typeItems[] = {"I420", "WebM"};
 
             ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
