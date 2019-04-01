@@ -25,3 +25,6 @@
 [submodule "libvpx"]
 	path = libvpx
 	url = https://chromium.googlesource.com/webm/libvpx
+[submodule "minimp4"]
+	path = minimp4
+	url = https://github.com/lieff/minimp4.git
