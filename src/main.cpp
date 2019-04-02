@@ -1194,6 +1194,48 @@ void EnableOpenGLDebugExtention() {
 }  // namespace
 
 int main(void) {
+#if defined(_MSC_VER) || defined(__MINGW32__)
+    {
+        const auto LibraryName = "openh264-1.8.0-win64.dll";
+        const auto module = LoadLibrary(LibraryName);
+
+        if (module != nullptr) {
+            class IEncoder {
+               public:
+                virtual int _method0() = 0;
+                virtual int _method1() = 0;
+                virtual int _method2() = 0;
+                virtual int _method3() = 0;
+                virtual int _method4() = 0;
+                virtual int _method5() = 0;
+                virtual int _method6() = 0;
+                virtual int SetOptionn(int32_t type, void *pValue) = 0;
+                virtual int _method8() = 0;
+            };
+
+            const auto WelsCreateSVCEncoder =
+                (int32_t(*)(IEncoder **))GetProcAddress(module,
+                                                        "WelsCreateSVCEncoder");
+            const auto WelsDestroySVCEncoder =
+                (void (*)(IEncoder *))GetProcAddress(module,
+                                                     "WelsDestroySVCEncoder");
+
+            IEncoder *pEncoder = nullptr;
+
+            int rv = 0;
+            rv = WelsCreateSVCEncoder(&pEncoder);
+            assert(rv == 0);
+
+            int32_t logLevel = 16;
+            rv = pEncoder->SetOptionn(25, &logLevel);
+            assert(rv == 0);
+
+            WelsDestroySVCEncoder(pEncoder);
+        }
+    }
+
+#endif
+
     glfwSetErrorCallback(glfwErrorCallback);
 
     if (!glfwInit()) return -1;
