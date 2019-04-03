@@ -1202,15 +1202,15 @@ int main(void) {
         if (module != nullptr) {
             class IEncoder {
                public:
-                virtual int _method0() = 0;
-                virtual int _method1() = 0;
-                virtual int _method2() = 0;
-                virtual int _method3() = 0;
-                virtual int _method4() = 0;
-                virtual int _method5() = 0;
-                virtual int _method6() = 0;
+                virtual void _0() = 0;
+                virtual void _1() = 0;
+                virtual void _2() = 0;
+                virtual void _3() = 0;
+                virtual void _4() = 0;
+                virtual void _5() = 0;
+                virtual void _6() = 0;
                 virtual int SetOptionn(int32_t type, void *pValue) = 0;
-                virtual int _method8() = 0;
+                virtual void _7() = 0;
             };
 
             const auto WelsCreateSVCEncoder =
