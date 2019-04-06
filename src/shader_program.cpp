@@ -174,6 +174,7 @@ void ShaderProgram::applyAttributes() {
             continue;
         }
 
+		glEnableVertexAttribArray(attr.location);
         glVertexAttribPointer(attr.location, attr.size, attr.type,
                               attr.normalized, attr.stride, attr.pointer);
     }

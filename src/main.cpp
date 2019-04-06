@@ -349,6 +349,7 @@ void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
 
     glBindVertexArray(vertexArraysObject);
     glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
     newProgram->applyAttributes();
     glBindVertexArray(0);
 
@@ -1026,11 +1027,11 @@ void update(void *) {
         glActiveTexture(GL_TEXTURE0 + channel);
         glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
         program->setUniformValue(uBackbuffer, channel++);
-
         program->applyUniforms();
 
         glBindVertexArray(vertexArraysObject);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+        glBindVertexArray(0);
     }
 
     if (isRecording) {
@@ -1110,8 +1111,9 @@ void update(void *) {
                                  glm::vec2(windowWidth, windowHeight));
     copyProgram->applyUniforms();
 
-    glBindVertexArray(vertexArraysObject);
+	glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+	glBindVertexArray(0);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwMakeContextCurrent(mainWindow);
@@ -1310,22 +1312,24 @@ int main(void) {
     compileShaderFromFile(copyProgram, vertexShaderPath, copyFS);
     assert(copyProgram->isOK());
 
-    // Initialize Buffers
-    glGenVertexArrays(1, &vertexArraysObject);
     glGenBuffers(1, &vIndex);
-    glGenBuffers(1, &vPosition);
-
-    glBindVertexArray(vertexArraysObject);
-    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 12, positions,
-                 GL_STATIC_DRAW);
-    program->applyAttributes();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * 6, indices,
                  GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    glEnableVertexAttribArray(0);
+    glGenBuffers(1, &vPosition);
+    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 12, positions,
+                 GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+    // Initialize Buffers
+    glGenVertexArrays(1, &vertexArraysObject);
+    glBindVertexArray(vertexArraysObject);
+    glBindBuffer(GL_ARRAY_BUFFER, vPosition);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
+    program->applyAttributes();
     glBindVertexArray(0);
 
     // Framebuffers
