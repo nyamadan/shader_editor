@@ -22,13 +22,15 @@
 #include "image.hpp"
 #include "webm_encoder.hpp"
 
+#include "mp4muxer.h"
+
 namespace {
 
-const char *const DefaultAssetPath = "./default";
-const char *const DefaultVertexShaderName = "vert.glsl";
-const char *const DefaultFragmentShaderName = "frag.glsl";
-const char *const CopyFragmentShaderName = "copy.glsl";
-const char *const ShaderToyPreSourceName = "pre_shadertoy.glsl";
+const char* const DefaultAssetPath = "./default";
+const char* const DefaultVertexShaderName = "vert.glsl";
+const char* const DefaultFragmentShaderName = "frag.glsl";
+const char* const CopyFragmentShaderName = "copy.glsl";
+const char* const ShaderToyPreSourceName = "pre_shadertoy.glsl";
 
 std::string assetPath;
 
@@ -38,7 +40,7 @@ int32_t windowHeight = 768;
 int32_t bufferWidth;
 int32_t bufferHeight;
 
-GLFWwindow *mainWindow = nullptr;
+GLFWwindow* mainWindow = nullptr;
 
 GLuint vIndex = 0;
 GLuint vPosition = 0;
@@ -61,20 +63,20 @@ const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
 
-uint8_t *yuvBuffer = nullptr;
+uint8_t* yuvBuffer = nullptr;
 int64_t currentFrame = 0;
 bool isRecording = false;
-FILE *fVideo;
+FILE* fVideo;
 
 std::unique_ptr<WebmEncoder> pWebmEncoder = nullptr;
 
 std::vector<std::shared_ptr<Image>> imageFiles;
 int32_t numImageFileNames = 0;
-char **imageFileNames = nullptr;
+char** imageFileNames = nullptr;
 
 std::vector<std::shared_ptr<ShaderProgram>> shaderFiles;
 int32_t numShaderFileNames = 0;
-char **shaderFileNames = nullptr;
+char** shaderFileNames = nullptr;
 
 TextEditor editor;
 
@@ -85,48 +87,64 @@ const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
 // OpenH264
 HMODULE openh264 = nullptr;
-int32_t (*WelsCreateSVCEncoder)(void **) = nullptr;
-void (*WelsDestroySVCEncoder)(void *) = nullptr;
-void *pOpenH264Encoder = nullptr;
+int32_t (*WelsCreateSVCEncoder)(void**) = nullptr;
+void (*WelsDestroySVCEncoder)(void*) = nullptr;
+void* pOpenH264Encoder = nullptr;
 
-void *CreateOpenH264Encoder(int32_t iUsageType, int32_t iPicWidth,
-                            int32_t iPicHeight, int32_t iTargetBitrate) {
-    void *pEncoder = nullptr;
+MP4E_mux_t* pMP4Muxer = nullptr;
+mp4_h26x_writer_t* pMP4H264Writer = nullptr;
+
+void WriteCallback(int64_t offset, const void* buffer, size_t size,
+                   void* token) {
+    FILE* f = (FILE*)token;
+    fseek(f, offset, SEEK_SET);
+    fwrite(buffer, size, 1, f);
+}
+
+void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight,
+                            int32_t iTargetBitrate, FILE* fp) {
+    void* pEncoder = nullptr;
     int rv = 0;
     rv = WelsCreateSVCEncoder(&pEncoder);
     assert(rv == 0);
 
+#ifndef NDEBUG
     int32_t logLevel = 16;
-    ((int32_t(*)(void *, int32_t, int32_t *))(*(void ***)pEncoder)[7])(
+    ((int32_t(*)(void*, int32_t, int32_t*))(*(void***)pEncoder)[7])(
         pEncoder, 25, &logLevel);
     assert(rv == 0);
+#endif
 
     uint8_t param[916];
     memset(param, 0, 916);
-    rv = ((int32_t(*)(void *pEncoder, void *pParam))(*(void ***)pEncoder)[2])(
+    rv = ((int32_t(*)(void* pEncoder, void* pParam))(*(void***)pEncoder)[2])(
         pEncoder, param);
     assert(rv == 0);
 
-    *(int32_t *)(param + 0) = iUsageType;       // iUsageType
-    *(int32_t *)(param + 4) = iPicWidth;        // Width
-    *(int32_t *)(param + 8) = iPicHeight;       // Height
-    *(int32_t *)(param + 12) = iTargetBitrate;  // iTargetBitrate
-    *(float *)(param + 20) = 15.0f;             // fMaxFrameRate
+    *(int32_t*)(param + 0) = 1;                // iUsageType
+    *(int32_t*)(param + 4) = iPicWidth;        // Width
+    *(int32_t*)(param + 8) = iPicHeight;       // Height
+    *(int32_t*)(param + 12) = iTargetBitrate;  // iTargetBitrate
+    *(int32_t*)(param + 16) = 1;               // iRCMode
+    *(uint8_t*)(param + 860) = 0;              // bEnableFrameSkip
 
-    rv = ((int32_t(*)(void *pEncoder, void *pParam))(*(void ***)pEncoder)[0])(
+    rv = ((int32_t(*)(void* pEncoder, void* pParam))(*(void***)pEncoder)[1])(
         pEncoder, param);
     assert(rv == 0);
 
     int32_t videoFormat = 23;
-    ((int32_t(*)(void *, int32_t, int32_t *))(*(void ***)pEncoder)[7])(
+    ((int32_t(*)(void*, int32_t, int32_t*))(*(void***)pEncoder)[7])(
         pEncoder, 0, &videoFormat);
     assert(rv == 0);
+
+    MP4MuxOpen(fp, WriteCallback, iPicWidth, iPicHeight, &pMP4Muxer,
+               &pMP4H264Writer);
 
     return pEncoder;
 }
 
-void EncodeFrame(void *pEncoder, uint8_t *data, int32_t iPicWidth,
-                 int32_t iPicHeight, FILE *fp) {
+void EncodeFrame(void* pEncoder, uint8_t* data, int32_t iPicWidth,
+                 int32_t iPicHeight, int64_t timestamp, FILE* fp) {
     int32_t rv = 0;
 
     const int32_t ySize = iPicWidth * iPicHeight;
@@ -138,32 +156,33 @@ void EncodeFrame(void *pEncoder, uint8_t *data, int32_t iPicWidth,
 
     uint8_t pic[72];
     memset(pic, 0, 72);
-    *(int32_t *)(pic + 0) = 23;               // iColorFormat
-    *((int32_t *)(pic + 4) + 0) = iPicWidth;  // iStride[0]
-    *((int32_t *)(pic + 4) + 1) = *((int32_t *)(pic + 4) + 2) =
-        iPicWidth >> 1;                   // iStride[1],iStride[1]
-    *(int32_t *)(pic + 56) = iPicWidth;   // Width
-    *(int32_t *)(pic + 60) = iPicHeight;  // Height
+    *(int32_t*)(pic + 0) = 23;               // iColorFormat
+    *((int32_t*)(pic + 4) + 0) = iPicWidth;  // iStride[0]
+    *((int32_t*)(pic + 4) + 1) = *((int32_t*)(pic + 4) + 2) =
+        iPicWidth >> 1;                  // iStride[1],iStride[1]
+    *(int32_t*)(pic + 56) = iPicWidth;   // Width
+    *(int32_t*)(pic + 60) = iPicHeight;  // Height
+    *(int64_t*)(pic + 64) = timestamp;   // uiTimeStamp
 
-    *((void **)(pic + 24) + 0) = data;                  // pData[0]
-    *((void **)(pic + 24) + 1) = data + ySize;          // pData[1]
-    *((void **)(pic + 24) + 2) = data + ySize + uSize;  // pData[2]
-    *((void **)(pic + 24) + 3) = nullptr;               // pData[3]
+    *((void**)(pic + 24) + 0) = data;                  // pData[0]
+    *((void**)(pic + 24) + 1) = data + ySize;          // pData[1]
+    *((void**)(pic + 24) + 2) = data + ySize + uSize;  // pData[2]
+    *((void**)(pic + 24) + 3) = nullptr;               // pData[3]
 
-    rv = ((int32_t(*)(void *pEncoder, void *pic, void *sFbi))(
-        *(void ***)pEncoder)[4])(pEncoder, &pic, sFbi);
+    rv = ((int32_t(*)(void* pEncoder, void* pic, void* sFbi))(
+        *(void***)pEncoder)[4])(pEncoder, &pic, sFbi);
     assert(rv == 0);
 
     int32_t iLayer = 0;
     int32_t iFrameSize = 0;
-    int32_t iLayerNum = *(int32_t *)&sFbi[0];
+    int32_t iLayerNum = *(int32_t*)&sFbi[0];
     while (iLayer < iLayerNum) {
-        uint8_t *pLayerBsInfo = &sFbi[40 * iLayer + 8];
+        uint8_t* pLayerBsInfo = &sFbi[40 * iLayer + 8];
         if (pLayerBsInfo != NULL) {
             int32_t iLayerSize = 0;
-            int32_t iNalCount = *(int32_t *)(pLayerBsInfo + 16);
-            int32_t *pNalLengthInByte = *(int32_t **)(pLayerBsInfo + 24);
-            uint8_t *pBsBuf = *(uint8_t **)(pLayerBsInfo + 32);
+            int32_t iNalCount = *(int32_t*)(pLayerBsInfo + 16);
+            int32_t* pNalLengthInByte = *(int32_t**)(pLayerBsInfo + 24);
+            uint8_t* pBsBuf = *(uint8_t**)(pLayerBsInfo + 32);
             int iNalIdx = iNalCount - 1;
             do {
                 iLayerSize += pNalLengthInByte[iNalIdx];
@@ -171,13 +190,13 @@ void EncodeFrame(void *pEncoder, uint8_t *data, int32_t iPicWidth,
             } while (iNalIdx >= 0);
             iFrameSize += iLayerSize;
 
-            fwrite(pBsBuf, sizeof(uint8_t), iLayerSize, fVideo);
+            MP4MuxWrite(pMP4H264Writer, pBsBuf, iLayerSize);
         }
         ++iLayer;
     }
 }
 
-void glfwErrorCallback(int error, const char *description) {
+void glfwErrorCallback(int error, const char* description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
 
@@ -205,12 +224,12 @@ void genShaderFileNames() {
     deleteShaderFileNamse();
 
     numShaderFileNames = static_cast<int32_t>(shaderFiles.size());
-    shaderFileNames = new char *[numShaderFileNames];
+    shaderFileNames = new char*[numShaderFileNames];
 
     for (int64_t i = 0; i < numShaderFileNames; i++) {
         std::string fileStr = shaderFiles[i]->getFragmentShader().getPath();
         const int64_t fileNameLength = fileStr.size();
-        char *fileName = new char[fileNameLength + 1];
+        char* fileName = new char[fileNameLength + 1];
         fileName[fileNameLength] = '\0';
         fileStr.copy(fileName, fileNameLength, 0);
         shaderFileNames[i] = fileName;
@@ -221,12 +240,12 @@ void genImageFileNames() {
     deleteImageFileNames();
 
     numImageFileNames = static_cast<int32_t>(imageFiles.size());
-    imageFileNames = new char *[numImageFileNames];
+    imageFileNames = new char*[numImageFileNames];
     for (int64_t i = 0; i < numImageFileNames; i++) {
         std::shared_ptr<Image> image = imageFiles[i];
-        const std::string &path = image->getPath();
+        const std::string& path = image->getPath();
         const int64_t fileNameLength = path.size();
-        char *fileName = new char[fileNameLength + 1];
+        char* fileName = new char[fileNameLength + 1];
         fileName[fileNameLength] = '\0';
         image->getPath().copy(fileName, fileNameLength, 0);
         imageFileNames[i] = fileName;
@@ -234,8 +253,8 @@ void genImageFileNames() {
 }
 
 void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
-                           const std::string &vsPath,
-                           const std::string &fsPath) {
+                           const std::string& vsPath,
+                           const std::string& fsPath) {
     const int64_t vsTime = getMTime(vsPath);
     const int64_t fsTime = getMTime(fsPath);
     std::string vsSource;
@@ -247,19 +266,19 @@ void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
 
 void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
                              std::shared_ptr<ShaderProgram> newProgram,
-                             const std::string &fsSource) {
-    const std::string &vsPath = program->getVertexShader().getPath();
-    const std::string &fsPath = program->getFragmentShader().getPath();
+                             const std::string& fsSource) {
+    const std::string& vsPath = program->getVertexShader().getPath();
+    const std::string& fsPath = program->getFragmentShader().getPath();
     const int64_t vsTime = getMTime(vsPath);
     const int64_t fsTime = getMTime(fsPath);
-    const std::string &vsSource = program->getVertexShader().getSource();
+    const std::string& vsSource = program->getVertexShader().getSource();
     newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
 void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
                              std::shared_ptr<ShaderProgram> newProgram) {
-    const std::string &vsPath = program->getVertexShader().getPath();
-    const std::string &fsPath = program->getFragmentShader().getPath();
+    const std::string& vsPath = program->getVertexShader().getPath();
+    const std::string& fsPath = program->getFragmentShader().getPath();
     const int64_t vsTime = getMTime(vsPath);
     const int64_t fsTime = getMTime(fsPath);
     std::string vsSource;
@@ -313,7 +332,7 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     yuvBuffer = new uint8_t[(int64_t)ySize + uSize + vSize];
 }
 
-void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
+void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                     int32_t uiPlatform) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin(
@@ -323,8 +342,8 @@ void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Save")) {
-                const std::string &textToSave = editor.GetText();
-                const char *const buffer = textToSave.c_str();
+                const std::string& textToSave = editor.GetText();
+                const char* const buffer = textToSave.c_str();
                 const int64_t size = textToSave.size();
 
                 if (uiShader != 0) {
@@ -345,14 +364,14 @@ void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
 
                         writeText(path, buffer, static_cast<int32_t>(size));
 
-                        const std::string &vsPath =
+                        const std::string& vsPath =
                             program->getVertexShader().getPath();
-                        const std::string &fsPath = path;
+                        const std::string& fsPath = path;
                         const int64_t vsTime = getMTime(vsPath);
                         const int64_t fsTime = getMTime(fsPath);
-                        const std::string &vsSource =
+                        const std::string& vsSource =
                             program->getVertexShader().getSource();
-                        const std::string &fsSource = textToSave;
+                        const std::string& fsSource = textToSave;
 
                         newProgram->compile(vsPath, fsPath, vsSource, fsSource,
                                             vsTime, fsTime);
@@ -452,9 +471,9 @@ void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
     program.swap(newProgram);
 }
 
-void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
+void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
                  const int32_t uiVideoResolution, const int32_t kbps,
-                 float &uiTimeValue) {
+                 float& uiTimeValue) {
     isRecording = true;
     currentFrame = 0;
     uiTimeValue = 0;
@@ -499,13 +518,13 @@ void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
         } break;
         case 2: {
             fVideo = fopen(fileName.c_str(), "wb");
-            pOpenH264Encoder = CreateOpenH264Encoder(1, bufferWidth,
-                                                     bufferHeight, kbps * 1000);
+            pOpenH264Encoder = CreateOpenH264Encoder(bufferWidth, bufferHeight,
+                                                     kbps * 1000, fVideo);
         } break;
     }
 }
 
-void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex,
+void writeOneFrame(const uint8_t* rgbaBuffer, const int32_t uiVideoTypeIndex,
                    unsigned long encodeDeadline) {
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
@@ -515,9 +534,9 @@ void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex,
     const int32_t uStride = bufferWidth / 2;
     const int32_t vStride = uStride;
 
-    uint8_t *yBuffer = yuvBuffer;
-    uint8_t *uBuffer = yBuffer + ySize;
-    uint8_t *vBuffer = uBuffer + uSize;
+    uint8_t* yBuffer = yuvBuffer;
+    uint8_t* uBuffer = yBuffer + ySize;
+    uint8_t* vBuffer = uBuffer + uSize;
 
     switch (uiVideoTypeIndex) {
         case 0: {
@@ -538,14 +557,15 @@ void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex,
                                    yStride, uBuffer, uStride, vBuffer, vStride,
                                    bufferWidth, -bufferHeight);
 
+                int64_t timestamp = roundl(currentFrame * 1001 / 30000);
                 EncodeFrame(pOpenH264Encoder, yuvBuffer, bufferWidth,
-                            bufferHeight, fVideo);
+                            bufferHeight, timestamp, fVideo);
             }
         } break;
     }
 }
 
-void update(void *) {
+void update(void*) {
 #ifndef NDEBUG
     static bool showImGuiDemoWindow = false;
 #endif
@@ -584,11 +604,11 @@ void update(void *) {
     float now = static_cast<float>(ImGui::GetTime());
     unsigned long encodeDeadline = VPX_DL_GOOD_QUALITY;
 
-    const char *uMouseName = nullptr;
-    const char *uResolutionName = nullptr;
-    const char *uTimeName = nullptr;
-    const char *uFrameName = nullptr;
-    const char *uBackbuffer = nullptr;
+    const char* uMouseName = nullptr;
+    const char* uResolutionName = nullptr;
+    const char* uTimeName = nullptr;
+    const char* uFrameName = nullptr;
+    const char* uBackbuffer = nullptr;
 
     switch (uiShaderPlatformIndex) {
         case 0:
@@ -656,8 +676,8 @@ void update(void *) {
         swapProgram(newProgram);
     }
 
-    const bool *const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2 &mousePos =
+    const bool* const mouseDown = ImGui::GetIO().MouseDown;
+    const ImVec2& mousePos =
         ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
 
     // onResizeWindow
@@ -685,12 +705,12 @@ void update(void *) {
     usedTextures.clear();
 
     if (numImageFileNames > 0) {
-        auto &uniforms = program->getUniforms();
+        auto& uniforms = program->getUniforms();
         for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-            ShaderUniform &u = it->second;
+            ShaderUniform& u = it->second;
 
             if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
-                int32_t &uiImage = uiImageFileNames[u.name];
+                int32_t& uiImage = uiImageFileNames[u.name];
 
                 if (uiImage < 0 || uiImage >= numImageFileNames) {
                     uiImage = 0;
@@ -728,7 +748,7 @@ void update(void *) {
             ImGui::Begin("File", &uiShaderFileWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
 
-            const char *const items[] = {"glslsandbox", "shadertoy"};
+            const char* const items[] = {"glslsandbox", "shadertoy"};
             if (ImGui::Combo("platform", &uiShaderPlatformIndex, items,
                              IM_ARRAYSIZE(items))) {
                 std::shared_ptr<ShaderProgram> newProgram =
@@ -834,11 +854,11 @@ void update(void *) {
         if (uiCaptureWindow) {
             ImGui::Begin("Capture", &uiCaptureWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
-            const char *resolutionItems[] = {
+            const char* resolutionItems[] = {
                 "256x144",  "427x240",   "640x360",   "720x480",
                 "1280x720", "1920x1080", "2560x1440", "3840x2160"};
 
-            const char *typeItems[] = {"I420", "WebM", "OpenH264"};
+            const char* typeItems[] = {"I420", "WebM", "MP4"};
 
             ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
                          IM_ARRAYSIZE(resolutionItems));
@@ -847,8 +867,8 @@ void update(void *) {
                 "format", &uiVideoTypeIndex, typeItems,
                 IM_ARRAYSIZE(typeItems) - (openh264 != nullptr ? 0 : 1));
 
-            if (uiVideoTypeIndex == 1 || uiVideoTypeIndex == 2) {
-                const char *qualityItems[] = {"fast", "good", "best"};
+            if (uiVideoTypeIndex == 1) {
+                const char* qualityItems[] = {"fast", "good", "best"};
 
                 ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
                              IM_ARRAYSIZE(qualityItems));
@@ -864,7 +884,9 @@ void update(void *) {
                         encodeDeadline = VPX_DL_BEST_QUALITY;
                         break;
                 }
+            }
 
+            if (uiVideoTypeIndex == 1 || uiVideoTypeIndex == 2) {
                 ImGui::DragFloat("Mbps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
             }
 
@@ -876,14 +898,14 @@ void update(void *) {
             ImGui::LabelText("framerate", "%s", ss.str().c_str());
 
             std::string fileName;
-            const char *const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
-            const char *const y4mExt = "y4m";
-            const char *const webmFilter = "Video file (*.webm)\0*.webm\0";
-            const char *const webmExt = "webm";
-            const char *const h264Filter = "Video file (*.264)\0*.264\0";
-            const char *const h264Ext = "264";
-            const char *filter = nullptr;
-            const char *ext = nullptr;
+            const char* const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
+            const char* const y4mExt = "y4m";
+            const char* const webmFilter = "Video file (*.webm)\0*.webm\0";
+            const char* const webmExt = "webm";
+            const char* const mp4Filter = "Video file (*.mp4)\0*.mp4\0";
+            const char* const mp4Ext = "mp4";
+            const char* filter = nullptr;
+            const char* ext = nullptr;
             bool ok = false;
 
             if (ImGui::Button("Save")) {
@@ -899,9 +921,9 @@ void update(void *) {
                         ext = webmExt;
                     } break;
                     case 2: {
-                        fileName = "video.264";
-                        filter = h264Filter;
-                        ext = h264Ext;
+                        fileName = "video.mp4";
+                        filter = mp4Filter;
+                        ext = mp4Ext;
                     } break;
                 }
 
@@ -958,11 +980,11 @@ void update(void *) {
         if (uiUniformWindow) {
             ImGui::Begin("Uniforms", &uiUniformWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
-            std::map<const std::string, ShaderUniform> &uniforms =
+            std::map<const std::string, ShaderUniform>& uniforms =
                 program->getUniforms();
             for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-                const std::string &name = it->first;
-                ShaderUniform &u = it->second;
+                const std::string& name = it->first;
+                ShaderUniform& u = it->second;
                 if (u.location < 0) {
                     continue;
                 }
@@ -984,7 +1006,7 @@ void update(void *) {
                         break;
                     case UniformType::Sampler2D:
                         if (numImageFileNames > 0) {
-                            int32_t &uiImage = uiImageFileNames[u.name];
+                            int32_t& uiImage = uiImageFileNames[u.name];
 
                             if (ImGui::Combo(u.name.c_str(), &uiImage,
                                              imageFileNames,
@@ -1015,7 +1037,7 @@ void update(void *) {
         if (uiBackBufferWindow) {
             ImGui::Begin("BackBuffer", &uiBackBufferWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
-            const char *const items[] = {"0.5", "1", "2", "4", "8"};
+            const char* const items[] = {"0.5", "1", "2", "4", "8"};
             if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
                              IM_ARRAYSIZE(items))) {
                 // update framebuffers
@@ -1043,8 +1065,8 @@ void update(void *) {
 
             for (auto iter = programErrors.begin(); iter != programErrors.end();
                  iter++) {
-                const auto &line = iter->first;
-                const auto &message = iter->second;
+                const auto& line = iter->first;
+                const auto& message = iter->second;
                 std::stringstream ss;
                 ss << std::setw(4) << std::setfill('0') << line << ": "
                    << message;
@@ -1109,7 +1131,7 @@ void update(void *) {
                                   mouseDown[1] ? 1.0f : 0.0f));
                 } else {
                     if (program->containsUniform(uMouseName)) {
-                        const glm::vec4 &prevMousePos =
+                        const glm::vec4& prevMousePos =
                             program->getUniform(uMouseName).value.vec4;
                         program->setUniformValue(
                             uMouseName,
@@ -1129,7 +1151,7 @@ void update(void *) {
 
         for (auto iter = usedTextures.begin(); iter != usedTextures.end();
              iter++) {
-            const std::string &name = iter->first;
+            const std::string& name = iter->first;
             std::shared_ptr<Image> image = iter->second;
 
             if (!image->isLoaded()) {
@@ -1158,7 +1180,7 @@ void update(void *) {
 
         if (currentFrame > 0) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
-            auto *ptr = static_cast<const uint8_t const *>(glMapBufferRange(
+            auto* ptr = static_cast<const uint8_t *>(glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
                 GL_MAP_READ_BIT));
 
@@ -1175,7 +1197,7 @@ void update(void *) {
 
         if (uiTimeValue >= uiVideoTime) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-            auto *ptr = static_cast<const uint8_t const *>(glMapBufferRange(
+            auto* ptr = static_cast<const uint8_t *>(glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
                 GL_MAP_READ_BIT));
 
@@ -1197,11 +1219,14 @@ void update(void *) {
                 } break;
                 case 2: {
                     if (pOpenH264Encoder != nullptr) {
-                        int32_t rv = ((int32_t(*)(void *pEncoder))(
-                            *(void ***)pOpenH264Encoder)[3])(pOpenH264Encoder);
+                        int32_t rv = ((int32_t(*)(void* pEncoder))(
+                            *(void***)pOpenH264Encoder)[3])(pOpenH264Encoder);
                         assert(rv == 0);
+
                         WelsDestroySVCEncoder(pOpenH264Encoder);
                         pOpenH264Encoder = nullptr;
+
+                        MP4MuxClose(pMP4Muxer, pMP4H264Writer);
 
                         fclose(fVideo);
                         fVideo = nullptr;
@@ -1256,12 +1281,12 @@ void update(void *) {
     glfwPollEvents();
 }
 
-void loadFiles(const std::string &path) {
+void loadFiles(const std::string& path) {
     AppLog::getInstance().addLog("Assets:\n");
 
     std::vector<std::string> files = openDir(path);
     for (auto iter = files.begin(); iter != files.end(); iter++) {
-        const std::string &file = *iter;
+        const std::string& file = *iter;
         std::string ext = getExtention(*iter);
         AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
 
@@ -1297,8 +1322,8 @@ void loadFiles(const std::string &path) {
 #ifndef __EMSCRIPTEN__
 
 void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
-                   GLsizei length, const GLchar *message,
-                   const void *user_param) {
+                   GLsizei length, const GLchar* message,
+                   const void* user_param) {
     switch (severity) {
         case GL_DEBUG_SEVERITY_NOTIFICATION:
             break;
@@ -1332,10 +1357,10 @@ int main(void) {
         openh264 = LoadLibrary(LibraryName);
 
         if (openh264 != nullptr) {
-            WelsCreateSVCEncoder = (int32_t(*)(void **))GetProcAddress(
+            WelsCreateSVCEncoder = (int32_t(*)(void**))GetProcAddress(
                 openh264, "WelsCreateSVCEncoder");
 
-            WelsDestroySVCEncoder = (void (*)(void *))GetProcAddress(
+            WelsDestroySVCEncoder = (void (*)(void*))GetProcAddress(
                 openh264, "WelsDestroySVCEncoder");
         }
     }
@@ -1475,8 +1500,8 @@ int main(void) {
     deleteShaderFileNamse();
 
     if (pOpenH264Encoder != nullptr) {
-        int32_t rv = ((int32_t(*)(void *pEncoder))(
-            *(void ***)pOpenH264Encoder)[3])(pOpenH264Encoder);
+        int32_t rv = ((int32_t(*)(void* pEncoder))(
+            *(void***)pOpenH264Encoder)[3])(pOpenH264Encoder);
         assert(rv == 0);
         WelsDestroySVCEncoder(pOpenH264Encoder);
         pOpenH264Encoder = nullptr;

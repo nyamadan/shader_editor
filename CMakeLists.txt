@@ -13,6 +13,7 @@ set(APP_SOURCES
     src/file_utils.cpp
     src/webm_encoder.cpp
     src/mymkvwriter.cpp
+    src/mp4muxer.c
 )
 
 set(GL3W_SOURCES
@@ -28,6 +29,9 @@ set(IMGUI_SOURCES
     imgui/examples/imgui_impl_opengl3.cpp
     ImGuiColorTextEdit/TextEditor.cpp
 )
+
+#minimp4
+include_directories(./minimp4)
 
 #GLM
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
@@ -48,8 +52,6 @@ include_directories(./libwebm)
 include_directories(./libvpx)
 
 # stb
-add_definitions(-DSTB_IMAGE_IMPLEMENTATION)
-add_definitions(-DSTB_IMAGE_WRITE_IMPLEMENTATION)
 include_directories(./stb)
 
 if(EMSCRIPTEN)
@@ -108,7 +110,7 @@ else()
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx.a)
 
     add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
-    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} ${LIB_VPX} glfw)
+    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} ${LIB_VPX} glfw webm yuv)
 endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
