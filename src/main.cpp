@@ -66,7 +66,7 @@ int64_t currentFrame = 0;
 bool isRecording = false;
 FILE *fVideo;
 
-std::unique_ptr<WebmEncoder> pEncoder = nullptr;
+std::unique_ptr<WebmEncoder> pWebmEncoder = nullptr;
 
 std::vector<std::shared_ptr<Image>> imageFiles;
 int32_t numImageFileNames = 0;
@@ -82,6 +82,100 @@ const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
 
 const GLushort indices[] = {0, 2, 1, 1, 2, 3};
+
+// OpenH264
+HMODULE openh264 = nullptr;
+int32_t (*WelsCreateSVCEncoder)(void **) = nullptr;
+void (*WelsDestroySVCEncoder)(void *) = nullptr;
+void *pOpenH264Encoder = nullptr;
+
+void *CreateOpenH264Encoder(int32_t iUsageType, int32_t iPicWidth,
+                            int32_t iPicHeight, int32_t iTargetBitrate) {
+    void *pEncoder = nullptr;
+    int rv = 0;
+    rv = WelsCreateSVCEncoder(&pEncoder);
+    assert(rv == 0);
+
+    int32_t logLevel = 16;
+    ((int32_t(*)(void *, int32_t, int32_t *))(*(void ***)pEncoder)[7])(
+        pEncoder, 25, &logLevel);
+    assert(rv == 0);
+
+    uint8_t param[916];
+    memset(param, 0, 916);
+    rv = ((int32_t(*)(void *pEncoder, void *pParam))(*(void ***)pEncoder)[2])(
+        pEncoder, param);
+    assert(rv == 0);
+
+    *(int32_t *)(param + 0) = iUsageType;       // iUsageType
+    *(int32_t *)(param + 4) = iPicWidth;        // Width
+    *(int32_t *)(param + 8) = iPicHeight;       // Height
+    *(int32_t *)(param + 12) = iTargetBitrate;  // iTargetBitrate
+    *(float *)(param + 20) = 15.0f;             // fMaxFrameRate
+
+    rv = ((int32_t(*)(void *pEncoder, void *pParam))(*(void ***)pEncoder)[0])(
+        pEncoder, param);
+    assert(rv == 0);
+
+    int32_t videoFormat = 23;
+    ((int32_t(*)(void *, int32_t, int32_t *))(*(void ***)pEncoder)[7])(
+        pEncoder, 0, &videoFormat);
+    assert(rv == 0);
+
+    return pEncoder;
+}
+
+void EncodeFrame(void *pEncoder, uint8_t *data, int32_t iPicWidth,
+                 int32_t iPicHeight, FILE *fp) {
+    int32_t rv = 0;
+
+    const int32_t ySize = iPicWidth * iPicHeight;
+    const int32_t uSize = ySize / 4;
+    const int32_t vSize = uSize;
+
+    uint8_t sFbi[5144];
+    memset(sFbi, 0, 5144);
+
+    uint8_t pic[72];
+    memset(pic, 0, 72);
+    *(int32_t *)(pic + 0) = 23;               // iColorFormat
+    *((int32_t *)(pic + 4) + 0) = iPicWidth;  // iStride[0]
+    *((int32_t *)(pic + 4) + 1) = *((int32_t *)(pic + 4) + 2) =
+        iPicWidth >> 1;                   // iStride[1],iStride[1]
+    *(int32_t *)(pic + 56) = iPicWidth;   // Width
+    *(int32_t *)(pic + 60) = iPicHeight;  // Height
+
+    *((void **)(pic + 24) + 0) = data;                  // pData[0]
+    *((void **)(pic + 24) + 1) = data + ySize;          // pData[1]
+    *((void **)(pic + 24) + 2) = data + ySize + uSize;  // pData[2]
+    *((void **)(pic + 24) + 3) = nullptr;               // pData[3]
+
+    rv = ((int32_t(*)(void *pEncoder, void *pic, void *sFbi))(
+        *(void ***)pEncoder)[4])(pEncoder, &pic, sFbi);
+    assert(rv == 0);
+
+    int32_t iLayer = 0;
+    int32_t iFrameSize = 0;
+    int32_t iLayerNum = *(int32_t *)&sFbi[0];
+    while (iLayer < iLayerNum) {
+        uint8_t *pLayerBsInfo = &sFbi[40 * iLayer + 8];
+        if (pLayerBsInfo != NULL) {
+            int32_t iLayerSize = 0;
+            int32_t iNalCount = *(int32_t *)(pLayerBsInfo + 16);
+            int32_t *pNalLengthInByte = *(int32_t **)(pLayerBsInfo + 24);
+            uint8_t *pBsBuf = *(uint8_t **)(pLayerBsInfo + 32);
+            int iNalIdx = iNalCount - 1;
+            do {
+                iLayerSize += pNalLengthInByte[iNalIdx];
+                --iNalIdx;
+            } while (iNalIdx >= 0);
+            iFrameSize += iLayerSize;
+
+            fwrite(pBsBuf, sizeof(uint8_t), iLayerSize, fVideo);
+        }
+        ++iLayer;
+    }
+}
 
 void glfwErrorCallback(int error, const char *description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
@@ -204,7 +298,7 @@ void updateFrameBuffersSize(GLint width, GLint height) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[i]);
-        glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4, 0,
+        glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4L, 0,
                      GL_STREAM_READ);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     }
@@ -216,7 +310,7 @@ void updateFrameBuffersSize(GLint width, GLint height) {
     const int32_t ySize = bufferWidth * bufferHeight;
     const int32_t uSize = ySize / 4;
     const int32_t vSize = uSize;
-    yuvBuffer = new uint8_t[ySize + uSize + vSize];
+    yuvBuffer = new uint8_t[(int64_t)ySize + uSize + vSize];
 }
 
 void ShowTextEditor(bool &showTextEditor, int32_t &uiShader,
@@ -400,8 +494,13 @@ void startRecord(const std::string &fileName, const int32_t uiVideoTypeIndex,
                     bufferWidth, bufferHeight);
         } break;
         case 1: {
-            pEncoder = std::make_unique<WebmEncoder>(
+            pWebmEncoder = std::make_unique<WebmEncoder>(
                 fileName, 1001, 30000, bufferWidth, bufferHeight, kbps);
+        } break;
+        case 2: {
+            fVideo = fopen(fileName.c_str(), "wb");
+            pOpenH264Encoder = CreateOpenH264Encoder(1, bufferWidth,
+                                                     bufferHeight, kbps * 1000);
         } break;
     }
 }
@@ -427,10 +526,21 @@ void writeOneFrame(const uint8_t *rgbaBuffer, const int32_t uiVideoTypeIndex,
                                -bufferHeight);
 
             fputs("FRAME\n", fVideo);
-            fwrite(yuvBuffer, sizeof(uint8_t), ySize + uSize + vSize, fVideo);
+            fwrite(yuvBuffer, sizeof(uint8_t), (int64_t)ySize + uSize + vSize,
+                   fVideo);
         } break;
         case 1: {
-            pEncoder->addRGBAFrame(rgbaBuffer, encodeDeadline);
+            pWebmEncoder->addRGBAFrame(rgbaBuffer, encodeDeadline);
+        } break;
+        case 2: {
+            if (pOpenH264Encoder != nullptr) {
+                libyuv::ABGRToI420(rgbaBuffer, bufferWidth * 4, yBuffer,
+                                   yStride, uBuffer, uStride, vBuffer, vStride,
+                                   bufferWidth, -bufferHeight);
+
+                EncodeFrame(pOpenH264Encoder, yuvBuffer, bufferWidth,
+                            bufferHeight, fVideo);
+            }
         } break;
     }
 }
@@ -728,16 +838,16 @@ void update(void *) {
                 "256x144",  "427x240",   "640x360",   "720x480",
                 "1280x720", "1920x1080", "2560x1440", "3840x2160"};
 
-            // TODO: OpenH264
-            const char *typeItems[] = {"I420", "WebM"};
+            const char *typeItems[] = {"I420", "WebM", "OpenH264"};
 
             ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
                          IM_ARRAYSIZE(resolutionItems));
 
-            ImGui::Combo("format", &uiVideoTypeIndex, typeItems,
-                         IM_ARRAYSIZE(typeItems));
+            ImGui::Combo(
+                "format", &uiVideoTypeIndex, typeItems,
+                IM_ARRAYSIZE(typeItems) - (openh264 != nullptr ? 0 : 1));
 
-            if (uiVideoTypeIndex == 1) {
+            if (uiVideoTypeIndex == 1 || uiVideoTypeIndex == 2) {
                 const char *qualityItems[] = {"fast", "good", "best"};
 
                 ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
@@ -770,6 +880,8 @@ void update(void *) {
             const char *const y4mExt = "y4m";
             const char *const webmFilter = "Video file (*.webm)\0*.webm\0";
             const char *const webmExt = "webm";
+            const char *const h264Filter = "Video file (*.264)\0*.264\0";
+            const char *const h264Ext = "264";
             const char *filter = nullptr;
             const char *ext = nullptr;
             bool ok = false;
@@ -785,6 +897,11 @@ void update(void *) {
                         fileName = "video.webm";
                         filter = webmFilter;
                         ext = webmExt;
+                    } break;
+                    case 2: {
+                        fileName = "video.264";
+                        filter = h264Filter;
+                        ext = h264Ext;
                     } break;
                 }
 
@@ -1076,7 +1193,19 @@ void update(void *) {
                     fVideo = nullptr;
                 } break;
                 case 1: {
-                    pEncoder->finalize(encodeDeadline);
+                    pWebmEncoder->finalize(encodeDeadline);
+                } break;
+                case 2: {
+                    if (pOpenH264Encoder != nullptr) {
+                        int32_t rv = ((int32_t(*)(void *pEncoder))(
+                            *(void ***)pOpenH264Encoder)[3])(pOpenH264Encoder);
+                        assert(rv == 0);
+                        WelsDestroySVCEncoder(pOpenH264Encoder);
+                        pOpenH264Encoder = nullptr;
+
+                        fclose(fVideo);
+                        fVideo = nullptr;
+                    }
                 } break;
             }
 
@@ -1111,9 +1240,9 @@ void update(void *) {
                                  glm::vec2(windowWidth, windowHeight));
     copyProgram->applyUniforms();
 
-	glBindVertexArray(vertexArraysObject);
+    glBindVertexArray(vertexArraysObject);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
-	glBindVertexArray(0);
+    glBindVertexArray(0);
 
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwMakeContextCurrent(mainWindow);
@@ -1199,40 +1328,15 @@ int main(void) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
     {
         const auto LibraryName = "openh264-1.8.0-win64.dll";
-        const auto module = LoadLibrary(LibraryName);
 
-        if (module != nullptr) {
-            class IEncoder {
-               public:
-                virtual void _0() = 0;
-                virtual void _1() = 0;
-                virtual void _2() = 0;
-                virtual void _3() = 0;
-                virtual void _4() = 0;
-                virtual void _5() = 0;
-                virtual void _6() = 0;
-                virtual int SetOptionn(int32_t type, void *pValue) = 0;
-                virtual void _7() = 0;
-            };
+        openh264 = LoadLibrary(LibraryName);
 
-            const auto WelsCreateSVCEncoder =
-                (int32_t(*)(IEncoder **))GetProcAddress(module,
-                                                        "WelsCreateSVCEncoder");
-            const auto WelsDestroySVCEncoder =
-                (void (*)(IEncoder *))GetProcAddress(module,
-                                                     "WelsDestroySVCEncoder");
+        if (openh264 != nullptr) {
+            WelsCreateSVCEncoder = (int32_t(*)(void **))GetProcAddress(
+                openh264, "WelsCreateSVCEncoder");
 
-            IEncoder *pEncoder = nullptr;
-
-            int rv = 0;
-            rv = WelsCreateSVCEncoder(&pEncoder);
-            assert(rv == 0);
-
-            int32_t logLevel = 16;
-            rv = pEncoder->SetOptionn(25, &logLevel);
-            assert(rv == 0);
-
-            WelsDestroySVCEncoder(pEncoder);
+            WelsDestroySVCEncoder = (void (*)(void *))GetProcAddress(
+                openh264, "WelsDestroySVCEncoder");
         }
     }
 
@@ -1369,6 +1473,14 @@ int main(void) {
 
     deleteImageFileNames();
     deleteShaderFileNamse();
+
+    if (pOpenH264Encoder != nullptr) {
+        int32_t rv = ((int32_t(*)(void *pEncoder))(
+            *(void ***)pOpenH264Encoder)[3])(pOpenH264Encoder);
+        assert(rv == 0);
+        WelsDestroySVCEncoder(pOpenH264Encoder);
+        pOpenH264Encoder = nullptr;
+    }
 
     glfwTerminate();
 #else
