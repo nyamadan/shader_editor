@@ -101,8 +101,7 @@ void WriteCallback(int64_t offset, const void* buffer, size_t size,
     fwrite(buffer, size, 1, f);
 }
 
-void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight,
-                            int32_t iTargetBitrate, FILE* fp) {
+void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight, FILE* fp) {
     void* pEncoder = nullptr;
     int rv = 0;
     rv = WelsCreateSVCEncoder(&pEncoder);
@@ -121,12 +120,18 @@ void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight,
         pEncoder, param);
     assert(rv == 0);
 
-    *(int32_t*)(param + 0) = 1;                // iUsageType
-    *(int32_t*)(param + 4) = iPicWidth;        // Width
-    *(int32_t*)(param + 8) = iPicHeight;       // Height
-    *(int32_t*)(param + 12) = iTargetBitrate;  // iTargetBitrate
-    *(int32_t*)(param + 16) = 1;               // iRCMode
-    *(uint8_t*)(param + 860) = 0;              // bEnableFrameSkip
+    *(int32_t*)(param + 0) = 1;           // iUsageType
+    *(int32_t*)(param + 4) = iPicWidth;   // Width
+    *(int32_t*)(param + 8) = iPicHeight;  // Height
+    *(int32_t*)(param + 12) = 0;          // iTargetBitrate
+    *(int32_t*)(param + 16) = -1;         // iRCMode
+    // *(int32_t*)(param + 20) = 60.0f;      // fMaxFrameRate
+    *(uint8_t*)(param + 860) = 0;         // bEnableFrameSkip
+    // *(uint8_t*)(param + 868) = 0;         // iMaxQp
+    // *(uint8_t*)(param + 872) = 0;         // iMinQp
+    for (uint64_t i = 0; i < 4; i++) {
+        *(uint8_t*)(param + 60 + i * 200) = 23;  // iDlayerQp
+    }
 
     rv = ((int32_t(*)(void* pEncoder, void* pParam))(*(void***)pEncoder)[1])(
         pEncoder, param);
@@ -518,8 +523,8 @@ void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
         } break;
         case 2: {
             fVideo = fopen(fileName.c_str(), "wb");
-            pOpenH264Encoder = CreateOpenH264Encoder(bufferWidth, bufferHeight,
-                                                     kbps * 1000, fVideo);
+            pOpenH264Encoder =
+                CreateOpenH264Encoder(bufferWidth, bufferHeight, fVideo);
         } break;
     }
 }
@@ -734,7 +739,7 @@ void update(void*) {
         ImGui::Checkbox("Stats", &uiStatsWindow);
         ImGui::Checkbox("Uniforms", &uiUniformWindow);
         ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
-        ImGui::Checkbox("Capture", &uiCaptureWindow);
+        ImGui::Checkbox("Export Video", &uiCaptureWindow);
         ImGui::Checkbox("Errors", &uiErrorWindow);
         ImGui::Checkbox("Log", &uiAppLogWindow);
 
@@ -852,7 +857,7 @@ void update(void*) {
         }
 
         if (uiCaptureWindow) {
-            ImGui::Begin("Capture", &uiCaptureWindow,
+            ImGui::Begin("Export Video", &uiCaptureWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
             const char* resolutionItems[] = {
                 "256x144",  "427x240",   "640x360",   "720x480",
@@ -884,9 +889,7 @@ void update(void*) {
                         encodeDeadline = VPX_DL_BEST_QUALITY;
                         break;
                 }
-            }
 
-            if (uiVideoTypeIndex == 1 || uiVideoTypeIndex == 2) {
                 ImGui::DragFloat("Mbps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
             }
 
@@ -908,7 +911,7 @@ void update(void*) {
             const char* ext = nullptr;
             bool ok = false;
 
-            if (ImGui::Button("Save")) {
+            if (ImGui::Button("Export")) {
                 switch (uiVideoTypeIndex) {
                     case 0: {
                         fileName = "video.y4m";
@@ -1180,7 +1183,7 @@ void update(void*) {
 
         if (currentFrame > 0) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
-            auto* ptr = static_cast<const uint8_t *>(glMapBufferRange(
+            auto* ptr = static_cast<const uint8_t*>(glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
                 GL_MAP_READ_BIT));
 
@@ -1197,7 +1200,7 @@ void update(void*) {
 
         if (uiTimeValue >= uiVideoTime) {
             glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-            auto* ptr = static_cast<const uint8_t *>(glMapBufferRange(
+            auto* ptr = static_cast<const uint8_t*>(glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
                 GL_MAP_READ_BIT));
 
