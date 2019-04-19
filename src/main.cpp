@@ -126,7 +126,7 @@ void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight, FILE* fp) {
     *(int32_t*)(param + 12) = 0;          // iTargetBitrate
     *(int32_t*)(param + 16) = -1;         // iRCMode
     // *(int32_t*)(param + 20) = 60.0f;      // fMaxFrameRate
-    *(uint8_t*)(param + 860) = 0;         // bEnableFrameSkip
+    *(uint8_t*)(param + 860) = 0;  // bEnableFrameSkip
     // *(uint8_t*)(param + 868) = 0;         // iMaxQp
     // *(uint8_t*)(param + 872) = 0;         // iMinQp
     for (uint64_t i = 0; i < 4; i++) {
@@ -461,6 +461,16 @@ void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
+void SetProgramErrors(std::map<int32_t, std::string>& programErrors) {
+    editor.SetErrorMarkers(programErrors);
+    if (programErrors.begin() != programErrors.end()) {
+        TextEditor::Coordinates cursor;
+        cursor.mColumn = 0;
+        cursor.mLine = programErrors.begin()->first - 1;
+        editor.SetCursorPosition(cursor);
+    }
+}
+
 void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
     newProgram->copyAttributesFrom(*program);
     newProgram->copyUniformsFrom(*program);
@@ -657,7 +667,7 @@ void update(void*) {
                 recompileShaderFromFile(program, newProgram);
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                editor.SetErrorMarkers(programErrors);
+                SetProgramErrors(programErrors);
             }
         }
 
@@ -674,7 +684,7 @@ void update(void*) {
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
         shaderFiles[uiShaderFileIndex] = newProgram;
-        editor.SetErrorMarkers(programErrors);
+        SetProgramErrors(programErrors);
     }
 
     if (newProgram->isOK()) {
@@ -769,7 +779,7 @@ void update(void*) {
 
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                editor.SetErrorMarkers(programErrors);
+                SetProgramErrors(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -791,7 +801,7 @@ void update(void*) {
 
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                editor.SetErrorMarkers(programErrors);
+                SetProgramErrors(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -814,7 +824,7 @@ void update(void*) {
                     editor.SetText(newProgram->getFragmentShader().getSource());
                     programErrors = newProgram->getFragmentShader().getErrors();
                     shaderFiles[uiShaderFileIndex] = newProgram;
-                    editor.SetErrorMarkers(programErrors);
+                    SetProgramErrors(programErrors);
 
                     shaderFiles.push_back(newProgram);
                     genShaderFileNames();
