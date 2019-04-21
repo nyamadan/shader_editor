@@ -116,5 +116,7 @@ int64_t getMTime(const std::string &path) {
     struct stat st;
     fstat(fd, &st);
 
+	close(fd);
+
     return static_cast<int64_t>(st.st_mtime);
 }
