@@ -340,9 +340,7 @@ void updateFrameBuffersSize(GLint width, GLint height) {
 void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                     int32_t uiPlatform) {
     auto cpos = editor.GetCursorPosition();
-    ImGui::Begin(
-        "Text Editor", &showTextEditor,
-        ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_MenuBar);
+    ImGui::Begin("Text Editor", &showTextEditor, ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -806,6 +804,13 @@ void update(void*) {
                 swapProgram(newProgram);
             }
 
+            ImGui::Checkbox("TextEditor", &uiShowTextEditor);
+
+            if (uiShowTextEditor) {
+                ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
+                               uiShaderPlatformIndex);
+            }
+
 #if defined(_MSC_VER) || defined(__MINGW32__)
             if (ImGui::Button("Open")) {
                 std::string path;
@@ -823,10 +828,10 @@ void update(void*) {
                         newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
                     programErrors = newProgram->getFragmentShader().getErrors();
-                    shaderFiles[uiShaderFileIndex] = newProgram;
                     SetProgramErrors(programErrors);
 
                     shaderFiles.push_back(newProgram);
+                    uiShaderFileIndex = shaderFiles.size() - 1;
                     genShaderFileNames();
 
                     uiShaderFileIndex = numShaderFileNames - 1;
@@ -835,13 +840,6 @@ void update(void*) {
                 }
             }
 #endif
-
-            ImGui::Checkbox("TextEditor", &uiShowTextEditor);
-
-            if (uiShowTextEditor) {
-                ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
-                               uiShaderPlatformIndex);
-            }
 
             ImGui::End();
         }
