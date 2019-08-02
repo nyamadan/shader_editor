@@ -1,0 +1,4 @@
+{
+  "cmake.generator": "Ninja",
+  "cmake.buildArgs": ["-w", "dupbuild=warn"]
+}

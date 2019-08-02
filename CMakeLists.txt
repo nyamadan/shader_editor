@@ -4,16 +4,16 @@ project(shader_editor VERSION 0.0.1)
 set(MSVC_RUNTIME "dll")
 
 set(APP_SOURCES
-    src/main.cpp
-    src/image.cpp
-    src/platform.cpp
-    src/app_log.cpp
-    src/shader_utils.cpp
-    src/shader_program.cpp
-    src/file_utils.cpp
-    src/webm_encoder.cpp
-    src/mymkvwriter.cpp
-    src/mp4muxer.c
+    ${PROJECT_SOURCE_DIR}/src/main.cpp
+    ${PROJECT_SOURCE_DIR}/src/image.cpp
+    ${PROJECT_SOURCE_DIR}/src/platform.cpp
+    ${PROJECT_SOURCE_DIR}/src/app_log.cpp
+    ${PROJECT_SOURCE_DIR}/src/shader_utils.cpp
+    ${PROJECT_SOURCE_DIR}/src/shader_program.cpp
+    ${PROJECT_SOURCE_DIR}/src/file_utils.cpp
+    ${PROJECT_SOURCE_DIR}/src/webm_encoder.cpp
+    ${PROJECT_SOURCE_DIR}/src/mymkvwriter.cpp
+    ${PROJECT_SOURCE_DIR}/src/mp4muxer.c
 )
 
 set(GL3W_SOURCES
@@ -31,26 +31,26 @@ set(IMGUI_SOURCES
 )
 
 #minimp4
-include_directories(./minimp4)
+include_directories(${PROJECT_SOURCE_DIR}/minimp4)
 
 #GLM
 add_definitions(-DGLM_ENABLE_EXPERIMENTAL)
-include_directories(./glm)
+include_directories(${PROJECT_SOURCE_DIR}/glm)
 
 # Imgui
-include_directories(./imgui)
-include_directories(./ImGuiColorTextEdit)
+include_directories(${PROJECT_SOURCE_DIR}/imgui)
+include_directories(${PROJECT_SOURCE_DIR}/ImGuiColorTextEdit)
 
 # WebM
-add_subdirectory(./libyuv)
-include_directories(./libyuv/include)
+add_subdirectory(${PROJECT_SOURCE_DIR}/libyuv)
+include_directories(${PROJECT_SOURCE_DIR}/libyuv/include)
 
-add_subdirectory(./libwebm)
-include_directories(./libwebm)
-include_directories(./libvpx)
+add_subdirectory(${PROJECT_SOURCE_DIR}/libwebm)
+include_directories(${PROJECT_SOURCE_DIR}/libwebm)
+include_directories(${PROJECT_SOURCE_DIR}/libvpx)
 
 # stb
-include_directories(./stb)
+include_directories(${PROJECT_SOURCE_DIR}/stb)
 
 if(EMSCRIPTEN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++17")
@@ -71,6 +71,12 @@ elseif(MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /J")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J")
 
+    if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+        string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+    endif()
+
     # OpenGL
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIRS})
@@ -80,11 +86,11 @@ elseif(MSVC)
         COMMAND "python" "gl3w_gen.py"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/gl3w"
     )
-    include_directories(./gl3w/include)
+    include_directories(${PROJECT_SOURCE_DIR}/gl3w/include)
 
     # GLFW
-    add_subdirectory(./glfw)
-    include_directories(./glfw/include)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
+    include_directories(${PROJECT_SOURCE_DIR}/glfw/include)
 
     # VPX
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
@@ -106,11 +112,11 @@ else()
         COMMAND "python" "gl3w_gen.py"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/gl3w"
     )
-    include_directories(./gl3w/include)
+    include_directories(${PROJECT_SOURCE_DIR}/gl3w/include)
 
     # GLFW
-    add_subdirectory(./glfw)
-    include_directories(./glfw/include)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
+    include_directories(${PROJECT_SOURCE_DIR}/glfw/include)
 
     # VPX
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx.a)
