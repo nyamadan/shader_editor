@@ -1363,7 +1363,7 @@ void EnableOpenGLDebugExtention() {
 int main(void) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
     {
-        const auto LibraryName = "openh264-1.8.0-win64.dll";
+        const auto LibraryName = "openh264-2.0.0-win64.dll";
 
         openh264 = LoadLibrary(LibraryName);
 

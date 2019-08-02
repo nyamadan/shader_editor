@@ -47,8 +47,6 @@ include_directories(./libyuv/include)
 
 add_subdirectory(./libwebm)
 include_directories(./libwebm)
-
-# add_subdirectory(./libvpx)
 include_directories(./libvpx)
 
 # stb
@@ -78,6 +76,10 @@ elseif(MSVC)
     include_directories(${OPENGL_INCLUDE_DIRS})
 
     # gl3w
+    execute_process(
+        COMMAND "python" "gl3w_gen.py"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/gl3w"
+    )
     include_directories(./gl3w/include)
 
     # GLFW
@@ -100,6 +102,10 @@ else()
     include_directories(${OPENGL_INCLUDE_DIRS})
 
     # gl3w
+    execute_process(
+        COMMAND "python" "gl3w_gen.py"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/gl3w"
+    )
     include_directories(./gl3w/include)
 
     # GLFW
