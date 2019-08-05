@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.2.0)
 project(shader_editor VERSION 0.0.1)
 
 set(MSVC_RUNTIME "dll")
@@ -72,9 +72,9 @@ elseif(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J")
 
     if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-        string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        string(REGEX REPLACE "/W[0-4]" "/W3" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3")
     endif()
 
     # OpenGL
@@ -88,17 +88,31 @@ elseif(MSVC)
     )
     include_directories(${PROJECT_SOURCE_DIR}/gl3w/include)
 
+    # mp4v2
+    execute_process(
+        COMMAND msbuild.exe mp4v2.sln -m -t:Build -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v142 -p:WindowsTargetPlatformVersion=10.0
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/mp4v2/mp4v2-Win"
+    )
+
     # GLFW
     add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
     include_directories(${PROJECT_SOURCE_DIR}/glfw/include)
 
     # VPX
+    execute_process(
+        COMMAND bash ./configure --target=x86_64-win64-vs15 --disable-vp9 --disable-vp8-decoder --disable-docs --disable-tools --disable-examples
+        COMMAND make
+        COMMAND msbuild.exe vpx.vcxproj -m -t:Build -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v142
+        COMMAND copy /Y ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib ${PROJECT_SOURCE_DIR}/vpxmd.lib
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/libvpx
+    )
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
-    add_executable(shader_editor ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
-    add_dependencies(shader_editor glfw webm yuv)
-    target_link_libraries(shader_editor ${OPENGL_LIBRARIES} ${LIB_VPX} glfw webm yuv)
+    add_executable(${PROJECT_NAME} ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
+    add_dependencies(${PROJECT_NAME} glfw webm yuv)
+    target_link_libraries(${PROJECT_NAME} ${OPENGL_LIBRARIES} ${LIB_VPX} glfw webm yuv)
+
 else()
     # C++17
     set (CMAKE_CXX_STANDARD 17)
