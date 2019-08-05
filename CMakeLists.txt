@@ -71,28 +71,23 @@ elseif(MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /J")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /J")
 
-    if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-        string(REGEX REPLACE "/W[0-4]" "/W3" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3")
-    endif()
-
     # OpenGL
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIRS})
 
     # gl3w
     execute_process(
-        COMMAND "python" "gl3w_gen.py"
+        COMMAND python gl3w_gen.py
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/gl3w"
     )
     include_directories(${PROJECT_SOURCE_DIR}/gl3w/include)
 
     # mp4v2
     execute_process(
-        COMMAND msbuild.exe mp4v2.sln -m -t:Build -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v142 -p:WindowsTargetPlatformVersion=10.0
-        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/mp4v2/mp4v2-Win"
+        COMMAND ${PROJECT_SOURCE_DIR}/build_mp4v2_vc142.cmd
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
+    set(LIB_MP4V2 ${PROJECT_SOURCE_DIR}/mp4v2/mp4v2-Win/bin/x64/Release/vpxmd.lib)
 
     # GLFW
     add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
@@ -103,12 +98,16 @@ elseif(MSVC)
         COMMAND ${PROJECT_SOURCE_DIR}/build_libvpx_vc142.cmd
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
-    set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(${PROJECT_NAME} ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
     add_dependencies(${PROJECT_NAME} glfw webm yuv)
-    target_link_libraries(${PROJECT_NAME} ${OPENGL_LIBRARIES} ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib glfw webm yuv)
+    target_link_libraries(${PROJECT_NAME}
+        ${OPENGL_LIBRARIES}
+        ${LIB_VPX}
+        ${LIV_MP4V2}
+        glfw webm yuv)
 else()
     # C++17
     set (CMAKE_CXX_STANDARD 17)
