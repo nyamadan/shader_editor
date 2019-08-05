@@ -100,19 +100,15 @@ elseif(MSVC)
 
     # VPX
     execute_process(
-        COMMAND bash ./configure --target=x86_64-win64-vs15 --disable-vp9 --disable-vp8-decoder --disable-docs --disable-tools --disable-examples
-        COMMAND make
-        COMMAND msbuild.exe vpx.vcxproj -m -t:Build -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v142
-        COMMAND copy /Y ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib ${PROJECT_SOURCE_DIR}/vpxmd.lib
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/libvpx
+        COMMAND ${PROJECT_SOURCE_DIR}/build_libvpx_vc142.cmd
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(${PROJECT_NAME} ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})
     add_dependencies(${PROJECT_NAME} glfw webm yuv)
-    target_link_libraries(${PROJECT_NAME} ${OPENGL_LIBRARIES} ${LIB_VPX} glfw webm yuv)
-
+    target_link_libraries(${PROJECT_NAME} ${OPENGL_LIBRARIES} ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib glfw webm yuv)
 else()
     # C++17
     set (CMAKE_CXX_STANDARD 17)
