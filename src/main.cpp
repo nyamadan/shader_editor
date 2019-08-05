@@ -459,9 +459,10 @@ void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-void SetProgramErrors(std::map<int32_t, std::string>& programErrors) {
+void SetProgramErrors(std::map<int32_t, std::string>& programErrors, bool jumpToErrorLine) {
     editor.SetErrorMarkers(programErrors);
-    if (programErrors.begin() != programErrors.end()) {
+
+    if (jumpToErrorLine && programErrors.begin() != programErrors.end()) {
         TextEditor::Coordinates cursor;
         cursor.mColumn = 0;
         cursor.mLine = programErrors.begin()->first - 1;
@@ -665,7 +666,7 @@ void update(void*) {
                 recompileShaderFromFile(program, newProgram);
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors);
+                SetProgramErrors(programErrors, true);
             }
         }
 
@@ -682,7 +683,7 @@ void update(void*) {
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
         shaderFiles[uiShaderFileIndex] = newProgram;
-        SetProgramErrors(programErrors);
+        SetProgramErrors(programErrors, editor.IsReadOnly());
     }
 
     if (newProgram->isOK()) {
@@ -777,7 +778,7 @@ void update(void*) {
 
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors);
+                SetProgramErrors(programErrors, true);
 
                 swapProgram(newProgram);
             }
@@ -799,7 +800,7 @@ void update(void*) {
 
                 programErrors = newProgram->getFragmentShader().getErrors();
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors);
+                SetProgramErrors(programErrors, true);
 
                 swapProgram(newProgram);
             }
@@ -828,7 +829,7 @@ void update(void*) {
                         newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
                     programErrors = newProgram->getFragmentShader().getErrors();
-                    SetProgramErrors(programErrors);
+                    SetProgramErrors(programErrors, true);
 
                     shaderFiles.push_back(newProgram);
                     uiShaderFileIndex = shaderFiles.size() - 1;
