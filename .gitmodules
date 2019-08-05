@@ -28,6 +28,3 @@
 [submodule "minimp4"]
 	path = minimp4
 	url = https://github.com/lieff/minimp4.git
-[submodule "mp4v2"]
-	path = mp4v2
-	url = https://github.com/TechSmith/mp4v2.git

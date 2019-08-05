@@ -82,13 +82,6 @@ elseif(MSVC)
     )
     include_directories(${PROJECT_SOURCE_DIR}/gl3w/include)
 
-    # mp4v2
-    execute_process(
-        COMMAND ${PROJECT_SOURCE_DIR}/build_mp4v2_vc142.cmd
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    )
-    set(LIB_MP4V2 ${PROJECT_SOURCE_DIR}/mp4v2/mp4v2-Win/bin/x64/Release/vpxmd.lib)
-
     # GLFW
     add_subdirectory(${PROJECT_SOURCE_DIR}/glfw)
     include_directories(${PROJECT_SOURCE_DIR}/glfw/include)
@@ -106,7 +99,6 @@ elseif(MSVC)
     target_link_libraries(${PROJECT_NAME}
         ${OPENGL_LIBRARIES}
         ${LIB_VPX}
-        ${LIV_MP4V2}
         glfw webm yuv)
 else()
     # C++17
