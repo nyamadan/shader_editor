@@ -1,4 +1,8 @@
 {
   "cmake.generator": "Ninja",
-  "cmake.buildArgs": ["-w", "dupbuild=warn"]
+  "cmake.buildArgs": [
+    "-w",
+    "dupbuild=warn"
+  ],
+  "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
 }
