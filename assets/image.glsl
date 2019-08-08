@@ -13,3 +13,4 @@ void main(void) {
     vec3 color = mix(prev, ch0, 0.1);
     gl_FragColor = vec4(color, 1.0);
 }
+

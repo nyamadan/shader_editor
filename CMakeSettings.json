@@ -1,28 +1,5 @@
-{
-  // このファイルの詳細については https://go.microsoft.com//fwlink//?linkid=834763 をご覧ください。
+﻿{
   "configurations": [
-    {
-      "name": "x86-Debug",
-      "generator": "Ninja",
-      "configurationType": "Debug",
-      "inheritEnvironments": [ "msvc_x86" ],
-      "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
-      "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
-      "cmakeCommandArgs": "",
-      "buildCommandArgs": "-v",
-      "ctestCommandArgs": ""
-    },
-    {
-      "name": "x86-Release",
-      "generator": "Ninja",
-      "configurationType": "RelWithDebInfo",
-      "inheritEnvironments": [ "msvc_x86" ],
-      "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
-      "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
-      "cmakeCommandArgs": "",
-      "buildCommandArgs": "-v",
-      "ctestCommandArgs": ""
-    },
     {
       "name": "x64-Debug",
       "generator": "Ninja",
@@ -32,7 +9,8 @@
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
       "cmakeCommandArgs": "",
       "buildCommandArgs": "-v",
-      "ctestCommandArgs": ""
+      "ctestCommandArgs": "",
+      "variables": []
     },
     {
       "name": "x64-Release",
@@ -43,7 +21,8 @@
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
       "cmakeCommandArgs": "",
       "buildCommandArgs": "-v",
-      "ctestCommandArgs": ""
+      "ctestCommandArgs": "",
+      "variables": []
     }
   ]
 }
