@@ -91,7 +91,7 @@ elseif(MSVC)
         COMMAND ${PROJECT_SOURCE_DIR}/build_libvpx_vc142.cmd
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
-    set(LIB_VPX ${PROJECT_SOURCE_DIR}/libvpx/x64/Release/vpxmd.lib)
+    set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
     add_executable(${PROJECT_NAME} ${APP_SOURCES} ${IMGUI_SOURCES} ${GL3W_SOURCES})

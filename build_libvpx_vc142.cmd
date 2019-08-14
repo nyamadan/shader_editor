@@ -6,4 +6,4 @@ IF NOT %ERRORLEVEL% == 0 (
   msbuild vpx.vcxproj -m -t:Build -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v142
 )
 POPD
-EXIT %ERRORLEVEL%
+COPY /Y libvpx\x64\Release\vpxmd.lib vpxmd.lib
