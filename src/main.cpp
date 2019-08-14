@@ -459,13 +459,14 @@ void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-void SetProgramErrors(std::map<int32_t, std::string>& programErrors, bool jumpToErrorLine) {
+void SetProgramErrors(std::map<int32_t, std::string>& programErrors,
+                      bool jumpToErrorLine) {
     editor.SetErrorMarkers(programErrors);
-
     if (jumpToErrorLine && programErrors.begin() != programErrors.end()) {
         TextEditor::Coordinates cursor;
         cursor.mColumn = 0;
         cursor.mLine = programErrors.begin()->first - 1;
+        editor.SetCursorPosition(TextEditor::Coordinates());
         editor.SetCursorPosition(cursor);
     }
 }
@@ -653,7 +654,7 @@ void update(void*) {
 
     if (now - lastCheckUpdate > CheckInterval) {
         if (program->checkExpiredWithReset()) {
-            if (uiShowTextEditor) {
+            if (uiDebugWindow && uiShowTextEditor) {
                 std::string text;
                 readText(program->getFragmentShader().getPath(), text);
                 editor.SetText(text);
@@ -1087,6 +1088,7 @@ void update(void*) {
                     TextEditor::Coordinates cursor;
                     cursor.mColumn = 0;
                     cursor.mLine = line - 1;
+                    editor.SetCursorPosition(TextEditor::Coordinates());
                     editor.SetCursorPosition(cursor);
                 }
             }
