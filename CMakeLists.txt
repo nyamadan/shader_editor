@@ -17,17 +17,17 @@ set(APP_SOURCES
 )
 
 set(GL3W_SOURCES
-    gl3w/src/gl3w.c
+    ${PROJECT_SOURCE_DIR}/gl3w/src/gl3w.c
 )
 
 set(IMGUI_SOURCES
-    imgui/imgui.cpp
-    imgui/imgui_draw.cpp
-    imgui/imgui_demo.cpp
-    imgui/imgui_widgets.cpp
-    imgui/examples/imgui_impl_glfw.cpp
-    imgui/examples/imgui_impl_opengl3.cpp
-    ImGuiColorTextEdit/TextEditor.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/imgui.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/imgui_draw.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/imgui_demo.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/imgui_widgets.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/examples/imgui_impl_glfw.cpp
+    ${PROJECT_SOURCE_DIR}/imgui/examples/imgui_impl_opengl3.cpp
+    ${PROJECT_SOURCE_DIR}/ImGuiColorTextEdit/TextEditor.cpp
 )
 
 #minimp4

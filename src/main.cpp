@@ -464,9 +464,7 @@ void SetProgramErrors(std::map<int32_t, std::string>& programErrors,
     editor.SetErrorMarkers(programErrors);
     if (jumpToErrorLine && programErrors.begin() != programErrors.end()) {
         TextEditor::Coordinates cursor;
-        cursor.mColumn = 0;
         cursor.mLine = programErrors.begin()->first - 1;
-        editor.SetCursorPosition(TextEditor::Coordinates());
         editor.SetCursorPosition(cursor);
     }
 }
@@ -658,6 +656,7 @@ void update(void*) {
                 std::string text;
                 readText(program->getFragmentShader().getPath(), text);
                 editor.SetText(text);
+                editor.SetCursorPosition(TextEditor::Coordinates());
             } else {
                 if (uiShaderPlatformIndex == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
@@ -1086,7 +1085,6 @@ void update(void*) {
                 bool selected = false;
                 if (ImGui::Selectable(ss.str().c_str(), selected)) {
                     TextEditor::Coordinates cursor;
-                    cursor.mColumn = 0;
                     cursor.mLine = line - 1;
                     editor.SetCursorPosition(TextEditor::Coordinates());
                     editor.SetCursorPosition(cursor);
