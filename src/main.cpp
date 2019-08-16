@@ -459,14 +459,8 @@ void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-void SetProgramErrors(std::map<int32_t, std::string>& programErrors,
-                      bool jumpToErrorLine) {
+void SetProgramErrors(std::map<int32_t, std::string>& programErrors) {
     editor.SetErrorMarkers(programErrors);
-    if (jumpToErrorLine && programErrors.begin() != programErrors.end()) {
-        TextEditor::Coordinates cursor;
-        cursor.mLine = programErrors.begin()->first - 1;
-        editor.SetCursorPosition(cursor);
-    }
 }
 
 void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
@@ -614,6 +608,8 @@ void update(void*) {
     float bufferScale =
         1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
 
+    int32_t cursorLine = -1;
+
     float now = static_cast<float>(ImGui::GetTime());
     unsigned long encodeDeadline = VPX_DL_GOOD_QUALITY;
 
@@ -665,8 +661,12 @@ void update(void*) {
                 }
                 recompileShaderFromFile(program, newProgram);
                 programErrors = newProgram->getFragmentShader().getErrors();
+                if (programErrors.begin() != programErrors.end()) {
+                    cursorLine = programErrors.begin()->first - 1;
+                }
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors, true);
+
+                SetProgramErrors(programErrors);
             }
         }
 
@@ -682,8 +682,13 @@ void update(void*) {
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
+        if (editor.IsReadOnly() &&
+            programErrors.begin() != programErrors.end()) {
+            cursorLine = programErrors.begin()->first - 1;
+        }
         shaderFiles[uiShaderFileIndex] = newProgram;
-        SetProgramErrors(programErrors, editor.IsReadOnly());
+
+        SetProgramErrors(programErrors);
     }
 
     if (newProgram->isOK()) {
@@ -775,10 +780,13 @@ void update(void*) {
                 }
 
                 recompileFragmentShader(program, newProgram, editor.GetText());
-
                 programErrors = newProgram->getFragmentShader().getErrors();
+                if (programErrors.begin() != programErrors.end()) {
+                    cursorLine = programErrors.begin()->first - 1;
+                }
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors, true);
+
+                SetProgramErrors(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -797,10 +805,16 @@ void update(void*) {
                 newProgram->compile();
 
                 editor.SetText(newProgram->getFragmentShader().getSource());
+                editor.SetCursorPosition(TextEditor::Coordinates());
 
                 programErrors = newProgram->getFragmentShader().getErrors();
+                if (programErrors.begin() != programErrors.end()) {
+                    cursorLine = programErrors.begin()->first - 1;
+                }
+
                 shaderFiles[uiShaderFileIndex] = newProgram;
-                SetProgramErrors(programErrors, true);
+
+                SetProgramErrors(programErrors);
 
                 swapProgram(newProgram);
             }
@@ -810,6 +824,11 @@ void update(void*) {
             if (uiShowTextEditor) {
                 ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
                                uiShaderPlatformIndex);
+                if (cursorLine >= 0) {
+                    editor.SetCursorPosition(
+                        TextEditor::Coordinates(cursorLine, 0));
+                    cursorLine = -1;
+                }
             }
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
@@ -828,8 +847,14 @@ void update(void*) {
                     compileShaderFromFile(
                         newProgram, program->getVertexShader().getPath(), path);
                     editor.SetText(newProgram->getFragmentShader().getSource());
+                    editor.SetCursorPosition(TextEditor::Coordinates());
+
                     programErrors = newProgram->getFragmentShader().getErrors();
-                    SetProgramErrors(programErrors, true);
+                    if (programErrors.begin() != programErrors.end()) {
+                        cursorLine = programErrors.begin()->first - 1;
+                    }
+
+                    SetProgramErrors(programErrors);
 
                     shaderFiles.push_back(newProgram);
                     uiShaderFileIndex = shaderFiles.size() - 1;
@@ -1086,7 +1111,6 @@ void update(void*) {
                 if (ImGui::Selectable(ss.str().c_str(), selected)) {
                     TextEditor::Coordinates cursor;
                     cursor.mLine = line - 1;
-                    editor.SetCursorPosition(TextEditor::Coordinates());
                     editor.SetCursorPosition(cursor);
                 }
             }
