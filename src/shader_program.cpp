@@ -13,8 +13,8 @@ void Shader::parseErrors(const std::string &error) {
 #ifdef __EMSCRIPTEN__
     const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
 #else
-    // const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
-    const std::regex re("^[^:]+:\\s*\\d+:(\\d+):\\s*(.*)$");
+    const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
+    // const std::regex re("^[^:]+:\\s*\\d+:(\\d+):\\s*(.*)$");
 #endif
     std::istringstream ss(error);
     std::string line;
