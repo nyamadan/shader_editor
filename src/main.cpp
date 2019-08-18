@@ -651,6 +651,7 @@ void update(void*) {
             if (uiDebugWindow && uiShowTextEditor) {
                 std::string text;
                 readText(program->getFragmentShader().getPath(), text);
+                cursorLine = editor.GetCursorPosition().mLine;
                 editor.SetText(text);
                 editor.SetCursorPosition(TextEditor::Coordinates());
             } else {
@@ -1411,9 +1412,7 @@ int main(void) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#else
+#elif __APPLE__
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
