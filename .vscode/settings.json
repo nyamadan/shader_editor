@@ -3,6 +3,5 @@
   "cmake.buildArgs": [
     "-w",
     "dupbuild=warn"
-  ],
-  "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
+  ]
 }
