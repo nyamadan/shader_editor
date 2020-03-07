@@ -94,11 +94,11 @@ void* pOpenH264Encoder = nullptr;
 MP4E_mux_t* pMP4Muxer = nullptr;
 mp4_h26x_writer_t* pMP4H264Writer = nullptr;
 
-void WriteCallback(int64_t offset, const void* buffer, size_t size,
+int WriteCallback(int64_t offset, const void* buffer, size_t size,
                    void* token) {
     FILE* f = (FILE*)token;
     fseek(f, offset, SEEK_SET);
-    fwrite(buffer, size, 1, f);
+    return fwrite(buffer, 1, size, f) != size;
 }
 
 void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight, FILE* fp) {

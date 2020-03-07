@@ -10,7 +10,7 @@ struct MP4E_mux_t;
 struct mp4_h26x_writer_t;
 #endif
 
-typedef void (*write_callback)(int64_t, const void* buffer, size_t size,
+typedef int (*write_callback)(int64_t, const void* buffer, size_t size,
                                void* token);
 
 #ifdef __cplusplus
