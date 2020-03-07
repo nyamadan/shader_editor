@@ -87,10 +87,6 @@ elseif(MSVC)
     include_directories(${PROJECT_SOURCE_DIR}/glfw/include)
 
     # VPX
-    execute_process(
-        COMMAND ${PROJECT_SOURCE_DIR}/build_libvpx_vc142.cmd
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    )
     set(LIB_VPX ${PROJECT_SOURCE_DIR}/vpxmd.lib)
 
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_USE_MATH_DEFINES -D_SCL_SECURE_NO_WARNINGS)
