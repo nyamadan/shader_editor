@@ -107,6 +107,9 @@ void writeText(const std::string &path, const char *const memblock,
 }
 
 int64_t getMTime(const std::string &path) {
+#ifdef __EMSCRIPTEN__
+    return 0;
+#else
     int32_t fd = open(path.c_str(), O_RDONLY | O_BINARY);
 
     if (fd < 0) {
@@ -116,7 +119,8 @@ int64_t getMTime(const std::string &path) {
     struct stat st;
     fstat(fd, &st);
 
-	close(fd);
+    close(fd);
 
     return static_cast<int64_t>(st.st_mtime);
+#endif
 }

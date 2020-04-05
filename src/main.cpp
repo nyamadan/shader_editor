@@ -86,6 +86,9 @@ const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
 const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
 // OpenH264
+#if !defined(_MSC_VER) && !defined(__MINGW32__)
+typedef void *HMODULE;
+#endif
 HMODULE openh264 = nullptr;
 int32_t (*WelsCreateSVCEncoder)(void**) = nullptr;
 void (*WelsDestroySVCEncoder)(void*) = nullptr;
