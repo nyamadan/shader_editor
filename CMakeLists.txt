@@ -14,6 +14,7 @@ set(APP_SOURCES
     ${PROJECT_SOURCE_DIR}/src/webm_encoder.cpp
     ${PROJECT_SOURCE_DIR}/src/mymkvwriter.cpp
     ${PROJECT_SOURCE_DIR}/src/mp4muxer.c
+    ${PROJECT_SOURCE_DIR}/src/h264_encoder.cpp
 )
 
 set(GL3W_SOURCES
