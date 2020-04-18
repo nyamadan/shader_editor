@@ -20,9 +20,9 @@
 #include "shader_program.hpp"
 #include "app_log.hpp"
 #include "image.hpp"
-#include "webm_encoder.hpp"
-
 #include "mp4muxer.h"
+#include "webm_encoder.hpp"
+#include "h264_encoder.hpp"
 
 namespace {
 
@@ -85,124 +85,10 @@ const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
 
 const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
-// OpenH264
-#if !defined(_MSC_VER) && !defined(__MINGW32__)
-typedef void* HMODULE;
-#endif
-HMODULE openh264 = nullptr;
-int32_t (*WelsCreateSVCEncoder)(void**) = nullptr;
-void (*WelsDestroySVCEncoder)(void*) = nullptr;
 void* pOpenH264Encoder = nullptr;
-
 MP4E_mux_t* pMP4Muxer = nullptr;
 mp4_h26x_writer_t* pMP4H264Writer = nullptr;
-
-int WriteCallback(int64_t offset, const void* buffer, size_t size,
-                  void* token) {
-    FILE* f = (FILE*)token;
-    fseek(f, offset, SEEK_SET);
-    return fwrite(buffer, 1, size, f) != size;
-}
-
-void* CreateOpenH264Encoder(int32_t iPicWidth, int32_t iPicHeight, FILE* fp) {
-    void* pEncoder = nullptr;
-    int rv = 0;
-    rv = WelsCreateSVCEncoder(&pEncoder);
-    assert(rv == 0);
-
-#ifndef NDEBUG
-    int32_t logLevel = 16;
-    ((int32_t(*)(void*, int32_t, int32_t*))(*(void***)pEncoder)[7])(
-        pEncoder, 25, &logLevel);
-    assert(rv == 0);
-#endif
-
-    uint8_t param[916];
-    memset(param, 0, 916);
-    rv = ((int32_t(*)(void* pEncoder, void* pParam))(*(void***)pEncoder)[2])(
-        pEncoder, param);
-    assert(rv == 0);
-
-    *(int32_t*)(param + 0) = 1;           // iUsageType
-    *(int32_t*)(param + 4) = iPicWidth;   // Width
-    *(int32_t*)(param + 8) = iPicHeight;  // Height
-    *(int32_t*)(param + 12) = 0;          // iTargetBitrate
-    *(int32_t*)(param + 16) = -1;         // iRCMode
-    // *(int32_t*)(param + 20) = 60.0f;      // fMaxFrameRate
-    *(uint8_t*)(param + 860) = 0;  // bEnableFrameSkip
-    // *(uint8_t*)(param + 868) = 0;         // iMaxQp
-    // *(uint8_t*)(param + 872) = 0;         // iMinQp
-    for (uint64_t i = 0; i < 4; i++) {
-        *(uint8_t*)(param + 60 + i * 200) = 23;  // iDlayerQp
-    }
-
-    rv = ((int32_t(*)(void* pEncoder, void* pParam))(*(void***)pEncoder)[1])(
-        pEncoder, param);
-    assert(rv == 0);
-
-    int32_t videoFormat = 23;
-    ((int32_t(*)(void*, int32_t, int32_t*))(*(void***)pEncoder)[7])(
-        pEncoder, 0, &videoFormat);
-    assert(rv == 0);
-
-    MP4MuxOpen(fp, WriteCallback, iPicWidth, iPicHeight, &pMP4Muxer,
-               &pMP4H264Writer);
-
-    return pEncoder;
-}
-
-void EncodeFrame(void* pEncoder, uint8_t* data, int32_t iPicWidth,
-                 int32_t iPicHeight, int64_t timestamp, FILE* fp) {
-    int32_t rv = 0;
-
-    const int32_t ySize = iPicWidth * iPicHeight;
-    const int32_t uSize = ySize / 4;
-    const int32_t vSize = uSize;
-
-    uint8_t sFbi[5144];
-    memset(sFbi, 0, 5144);
-
-    uint8_t pic[72];
-    memset(pic, 0, 72);
-    *(int32_t*)(pic + 0) = 23;               // iColorFormat
-    *((int32_t*)(pic + 4) + 0) = iPicWidth;  // iStride[0]
-    *((int32_t*)(pic + 4) + 1) = *((int32_t*)(pic + 4) + 2) =
-        iPicWidth >> 1;                  // iStride[1],iStride[1]
-    *(int32_t*)(pic + 56) = iPicWidth;   // Width
-    *(int32_t*)(pic + 60) = iPicHeight;  // Height
-    *(int64_t*)(pic + 64) = timestamp;   // uiTimeStamp
-
-    *((void**)(pic + 24) + 0) = data;                  // pData[0]
-    *((void**)(pic + 24) + 1) = data + ySize;          // pData[1]
-    *((void**)(pic + 24) + 2) = data + ySize + uSize;  // pData[2]
-    *((void**)(pic + 24) + 3) = nullptr;               // pData[3]
-
-    rv = ((int32_t(*)(void* pEncoder, void* pic, void* sFbi))(
-        *(void***)pEncoder)[4])(pEncoder, &pic, sFbi);
-    assert(rv == 0);
-
-    int32_t iLayer = 0;
-    int32_t iFrameSize = 0;
-    int32_t iLayerNum = *(int32_t*)&sFbi[0];
-    while (iLayer < iLayerNum) {
-        uint8_t* pLayerBsInfo = &sFbi[40 * iLayer + 8];
-        if (pLayerBsInfo != NULL) {
-            int32_t iLayerSize = 0;
-            int32_t iNalCount = *(int32_t*)(pLayerBsInfo + 16);
-            int32_t* pNalLengthInByte = *(int32_t**)(pLayerBsInfo + 24);
-            uint8_t* pBsBuf = *(uint8_t**)(pLayerBsInfo + 32);
-            int iNalIdx = iNalCount - 1;
-            do {
-                iLayerSize += pNalLengthInByte[iNalIdx];
-                --iNalIdx;
-            } while (iNalIdx >= 0);
-            iFrameSize += iLayerSize;
-
-            MP4MuxWrite(pMP4H264Writer, pBsBuf, iLayerSize);
-        }
-        ++iLayer;
-    }
-}
+bool h264enabled = false;
 
 void glfwErrorCallback(int error, const char* description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
@@ -528,8 +414,9 @@ void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
         } break;
         case 2: {
             fVideo = fopen(fileName.c_str(), "wb");
-            pOpenH264Encoder =
-                CreateOpenH264Encoder(bufferWidth, bufferHeight, fVideo);
+            h264encoder::CreateOpenH264Encoder(&pOpenH264Encoder, &pMP4Muxer,
+                                               &pMP4H264Writer, bufferWidth,
+                                               bufferHeight, fVideo);
         } break;
     }
 }
@@ -566,10 +453,9 @@ void writeOneFrame(const uint8_t* rgbaBuffer, const int32_t uiVideoTypeIndex,
                 libyuv::ABGRToI420(rgbaBuffer, bufferWidth * 4, yBuffer,
                                    yStride, uBuffer, uStride, vBuffer, vStride,
                                    bufferWidth, -bufferHeight);
-
                 int64_t timestamp = roundl(currentFrame * 1001 / 30000);
-                EncodeFrame(pOpenH264Encoder, yuvBuffer, bufferWidth,
-                            bufferHeight, timestamp, fVideo);
+                h264encoder::EncodeFrame(pOpenH264Encoder, pMP4H264Writer, yuvBuffer,
+                                         bufferWidth, bufferHeight, timestamp);
             }
         } break;
     }
@@ -908,7 +794,7 @@ void update(void*) {
 
             ImGui::Combo(
                 "format", &uiVideoTypeIndex, typeItems,
-                IM_ARRAYSIZE(typeItems) - (openh264 != nullptr ? 0 : 1));
+                IM_ARRAYSIZE(typeItems) - (h264enabled ? 0 : 1));
 
             if (uiVideoTypeIndex == 1) {
                 const char* qualityItems[] = {"fast", "good", "best"};
@@ -1259,16 +1145,12 @@ void update(void*) {
                 } break;
                 case 2: {
                     if (pOpenH264Encoder != nullptr) {
-                        int32_t rv = ((int32_t(*)(void* pEncoder))(
-                            *(void***)pOpenH264Encoder)[3])(pOpenH264Encoder);
-                        assert(rv == 0);
-
-                        WelsDestroySVCEncoder(pOpenH264Encoder);
-                        pOpenH264Encoder = nullptr;
-
-                        MP4MuxClose(pMP4Muxer, pMP4H264Writer);
-
+                        h264encoder::Finalize(pOpenH264Encoder, pMP4Muxer, pMP4H264Writer);
                         fclose(fVideo);
+
+                        pOpenH264Encoder = nullptr;
+                        pMP4Muxer = nullptr;
+                        pMP4H264Writer = nullptr;
                         fVideo = nullptr;
                     }
                 } break;
@@ -1391,19 +1273,7 @@ void EnableOpenGLDebugExtention() {
 
 int main(void) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
-    {
-        const auto LibraryName = "openh264-2.0.0-win64.dll";
-
-        openh264 = LoadLibraryA(LibraryName);
-
-        if (openh264 != nullptr) {
-            WelsCreateSVCEncoder = (int32_t(*)(void**))GetProcAddress(
-                openh264, "WelsCreateSVCEncoder");
-
-            WelsDestroySVCEncoder = (void (*)(void*))GetProcAddress(
-                openh264, "WelsDestroySVCEncoder");
-        }
-    }
+    h264enabled = h264encoder::LoadEncoderLibrary();
 
 #endif
 
@@ -1538,10 +1408,7 @@ int main(void) {
     deleteShaderFileNamse();
 
     if (pOpenH264Encoder != nullptr) {
-        int32_t rv = ((int32_t(*)(void* pEncoder))(
-            *(void***)pOpenH264Encoder)[3])(pOpenH264Encoder);
-        assert(rv == 0);
-        WelsDestroySVCEncoder(pOpenH264Encoder);
+        h264encoder::DestroyOpenH264Encoder(pOpenH264Encoder);
         pOpenH264Encoder = nullptr;
     }
 
