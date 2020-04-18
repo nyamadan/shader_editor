@@ -87,7 +87,7 @@ const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
 // OpenH264
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
-typedef void *HMODULE;
+typedef void* HMODULE;
 #endif
 HMODULE openh264 = nullptr;
 int32_t (*WelsCreateSVCEncoder)(void**) = nullptr;
@@ -98,7 +98,7 @@ MP4E_mux_t* pMP4Muxer = nullptr;
 mp4_h26x_writer_t* pMP4H264Writer = nullptr;
 
 int WriteCallback(int64_t offset, const void* buffer, size_t size,
-                   void* token) {
+                  void* token) {
     FILE* f = (FILE*)token;
     fseek(f, offset, SEEK_SET);
     return fwrite(buffer, 1, size, f) != size;
