@@ -1394,7 +1394,7 @@ int main(void) {
     {
         const auto LibraryName = "openh264-2.0.0-win64.dll";
 
-        openh264 = LoadLibrary(LibraryName);
+        openh264 = LoadLibraryA(LibraryName);
 
         if (openh264 != nullptr) {
             WelsCreateSVCEncoder = (int32_t(*)(void**))GetProcAddress(
