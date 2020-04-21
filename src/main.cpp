@@ -20,9 +20,7 @@
 #include "shader_program.hpp"
 #include "app_log.hpp"
 #include "image.hpp"
-#include "mp4muxer.h"
-#include "webm_encoder.hpp"
-#include "h264_encoder.hpp"
+#include "recording.hpp"
 
 namespace {
 
@@ -62,13 +60,7 @@ GLuint pixelBuffers[2];
 const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
 float timeStart = 0;
-
-uint8_t* yuvBuffer = nullptr;
-int64_t currentFrame = 0;
-bool isRecording = false;
-FILE* fVideo;
-
-std::unique_ptr<WebmEncoder> pWebmEncoder = nullptr;
+uint64_t currentFrame = 0;
 
 std::vector<std::shared_ptr<Image>> imageFiles;
 int32_t numImageFileNames = 0;
@@ -85,9 +77,7 @@ const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
 
 const GLushort indices[] = {0, 2, 1, 1, 2, 3};
 
-void* pOpenH264Encoder = nullptr;
-MP4E_mux_t* pMP4Muxer = nullptr;
-mp4_h26x_writer_t* pMP4H264Writer = nullptr;
+std::unique_ptr<Recording> recording = std::make_unique<Recording>();
 bool h264enabled = false;
 
 void glfwErrorCallback(int error, const char* description) {
@@ -215,15 +205,6 @@ void updateFrameBuffersSize(GLint width, GLint height) {
                      GL_STREAM_READ);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     }
-
-    if (yuvBuffer != nullptr) {
-        delete[] yuvBuffer;
-    }
-
-    const int32_t ySize = bufferWidth * bufferHeight;
-    const int32_t uSize = ySize / 4;
-    const int32_t vSize = uSize;
-    yuvBuffer = new uint8_t[(int64_t)ySize + uSize + vSize];
 }
 
 void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
@@ -369,8 +350,8 @@ void swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
 
 void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
                  const int32_t uiVideoResolution, const int32_t kbps,
+                 unsigned long encodeDeadline,
                  float& uiTimeValue) {
-    isRecording = true;
     currentFrame = 0;
     uiTimeValue = 0;
 
@@ -401,64 +382,7 @@ void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
             break;
     }
 
-    switch (uiVideoTypeIndex) {
-        case 0: {
-            fVideo = fopen(fileName.c_str(), "wb");
-            fprintf(fVideo,
-                    "YUV4MPEG2 W%d H%d F30000:1001 Ip A0:0 C420 XYSCSS=420\n",
-                    bufferWidth, bufferHeight);
-        } break;
-        case 1: {
-            pWebmEncoder = std::make_unique<WebmEncoder>(
-                fileName, 1001, 30000, bufferWidth, bufferHeight, kbps);
-        } break;
-        case 2: {
-            fVideo = fopen(fileName.c_str(), "wb");
-            h264encoder::CreateOpenH264Encoder(&pOpenH264Encoder, &pMP4Muxer,
-                                               &pMP4H264Writer, bufferWidth,
-                                               bufferHeight, fVideo);
-        } break;
-    }
-}
-
-void writeOneFrame(const uint8_t* rgbaBuffer, const int32_t uiVideoTypeIndex,
-                   unsigned long encodeDeadline) {
-    const int32_t ySize = bufferWidth * bufferHeight;
-    const int32_t uSize = ySize / 4;
-    const int32_t vSize = uSize;
-
-    const int32_t yStride = bufferWidth;
-    const int32_t uStride = bufferWidth / 2;
-    const int32_t vStride = uStride;
-
-    uint8_t* yBuffer = yuvBuffer;
-    uint8_t* uBuffer = yBuffer + ySize;
-    uint8_t* vBuffer = uBuffer + uSize;
-
-    switch (uiVideoTypeIndex) {
-        case 0: {
-            libyuv::ABGRToI420(rgbaBuffer, bufferWidth * 4, yBuffer, yStride,
-                               uBuffer, uStride, vBuffer, vStride, bufferWidth,
-                               -bufferHeight);
-
-            fputs("FRAME\n", fVideo);
-            fwrite(yuvBuffer, sizeof(uint8_t), (int64_t)ySize + uSize + vSize,
-                   fVideo);
-        } break;
-        case 1: {
-            pWebmEncoder->addRGBAFrame(rgbaBuffer, encodeDeadline);
-        } break;
-        case 2: {
-            if (pOpenH264Encoder != nullptr) {
-                libyuv::ABGRToI420(rgbaBuffer, bufferWidth * 4, yBuffer,
-                                   yStride, uBuffer, uStride, vBuffer, vStride,
-                                   bufferWidth, -bufferHeight);
-                int64_t timestamp = roundl(currentFrame * 1001 / 30000);
-                h264encoder::EncodeFrame(pOpenH264Encoder, pMP4H264Writer, yuvBuffer,
-                                         bufferWidth, bufferHeight, timestamp);
-            }
-        } break;
-    }
+    recording->start(bufferWidth, bufferHeight, fileName, uiVideoTypeIndex, kbps, encodeDeadline);
 }
 
 void update(void*) {
@@ -590,7 +514,7 @@ void update(void*) {
         ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
 
     // onResizeWindow
-    if (!isRecording &&
+    if (!recording->getIsRecording() &&
         (currentWidth != windowWidth || currentHeight != windowHeight)) {
         updateFrameBuffersSize(static_cast<GLint>(currentWidth * bufferScale),
                                static_cast<GLint>(currentHeight * bufferScale));
@@ -599,7 +523,7 @@ void update(void*) {
     windowWidth = currentWidth;
     windowHeight = currentHeight;
 
-    if (isRecording) {
+    if (recording->getIsRecording()) {
         uiTimeValue = static_cast<float>(static_cast<double>(currentFrame) *
                                          (1001.0 / 30000.0));
     } else {
@@ -863,6 +787,7 @@ void update(void*) {
                     startRecord(fileName, uiVideoTypeIndex,
                                 uiVideoResolutionIndex,
                                 static_cast<int32_t>(uiVideoMbps * 1000.0f),
+                                encodeDeadline,
                                 uiTimeValue);
                     ImGui::OpenPopup("Export Progress");
                 }
@@ -870,7 +795,7 @@ void update(void*) {
 
             if (ImGui::BeginPopupModal("Export Progress", NULL,
                                        ImGuiWindowFlags_AlwaysAutoResize)) {
-                if (!isRecording) {
+                if (!recording->getIsRecording()) {
                     ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
 
                     ImGui::Separator();
@@ -1032,7 +957,7 @@ void update(void*) {
 
     switch (uiShaderPlatformIndex) {
         case 0:
-            if (isRecording) {
+            if (recording->getIsRecording()) {
                 program->setUniformValue(uMouseName, glm::vec2(0.5f, 0.5f));
             } else {
                 program->setUniformValue(
@@ -1044,7 +969,7 @@ void update(void*) {
             program->setUniformValue(uFrameName,
                                      static_cast<int>(currentFrame));
 
-            if (isRecording) {
+            if (recording->getIsRecording()) {
                 program->setUniformValue(
                     uMouseName, glm::vec4(0.5f * windowWidth,
                                           0.5f * windowHeight, 0.0f, 0.0f));
@@ -1099,71 +1024,22 @@ void update(void*) {
         glBindVertexArray(0);
     }
 
-    if (isRecording) {
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-        glReadPixels(0, 0, bufferWidth, bufferHeight, GL_RGBA, GL_UNSIGNED_BYTE,
-                     0);
+    if (recording->getIsRecording()) {
+        bool isLastFrame = uiTimeValue >= uiVideoTime;
 
-        if (currentFrame > 0) {
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[readBufferIndex]);
-            auto* ptr = static_cast<const uint8_t*>(glMapBufferRange(
-                GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
-                GL_MAP_READ_BIT));
+        recording->update(isLastFrame, currentFrame,
+                          pixelBuffers[writeBufferIndex],
+                          pixelBuffers[readBufferIndex]);
 
-            if (ptr != nullptr) {
-                writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
-                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-                ptr = nullptr;
-            }
-        }
-
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
-        currentFrame++;
-
-        if (uiTimeValue >= uiVideoTime) {
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[writeBufferIndex]);
-            auto* ptr = static_cast<const uint8_t*>(glMapBufferRange(
-                GL_PIXEL_PACK_BUFFER, 0, bufferWidth * bufferHeight * 4,
-                GL_MAP_READ_BIT));
-
-            if (ptr != nullptr) {
-                writeOneFrame(ptr, uiVideoTypeIndex, encodeDeadline);
-                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-                ptr = nullptr;
-            }
-
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
-            switch (uiVideoTypeIndex) {
-                case 0: {
-                    fclose(fVideo);
-                    fVideo = nullptr;
-                } break;
-                case 1: {
-                    pWebmEncoder->finalize(encodeDeadline);
-                } break;
-                case 2: {
-                    if (pOpenH264Encoder != nullptr) {
-                        h264encoder::Finalize(pOpenH264Encoder, pMP4Muxer, pMP4H264Writer);
-                        fclose(fVideo);
-
-                        pOpenH264Encoder = nullptr;
-                        pMP4Muxer = nullptr;
-                        pMP4H264Writer = nullptr;
-                        fVideo = nullptr;
-                    }
-                } break;
-            }
-
+        if(isLastFrame) {
             bufferScale =
                 1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
             updateFrameBuffersSize(
                 static_cast<GLint>(currentWidth * bufferScale),
                 static_cast<GLint>(currentHeight * bufferScale));
-
-            isRecording = false;
         }
+
+        currentFrame++;
     } else {
         if (uiPlaying) {
             currentFrame++;
@@ -1407,10 +1283,9 @@ int main(void) {
     deleteImageFileNames();
     deleteShaderFileNamse();
 
-    if (pOpenH264Encoder != nullptr) {
-        h264encoder::DestroyOpenH264Encoder(pOpenH264Encoder);
-        pOpenH264Encoder = nullptr;
-    }
+    recording->cleanup();
+
+    h264encoder::UnloadEncoderLibrary();
 
     glfwTerminate();
 #else

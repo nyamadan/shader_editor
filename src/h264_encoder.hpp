@@ -2,6 +2,7 @@
 
 namespace h264encoder {
 bool LoadEncoderLibrary();
+void UnloadEncoderLibrary();
 
 void EncodeFrame(void* pEncoder, mp4_h26x_writer_t* pWriter, uint8_t* data,
                  int32_t iPicWidth, int32_t iPicHeight, int64_t timestamp);

@@ -41,6 +41,13 @@ bool LoadEncoderLibrary() {
     return true;
 }
 
+void UnloadEncoderLibrary() {
+    if (_openh264 != nullptr) {
+        FreeLibrary(_openh264);
+        _openh264 = nullptr;
+    }
+}
+
 void Finalize(void* pOpenH264Encoder, MP4E_mux_t* pMP4Muxer,
               mp4_h26x_writer_t* pMP4H264Writer) {
     int32_t rv = ((int32_t(*)(void* pEncoder))(*(void***)pOpenH264Encoder)[3])(
