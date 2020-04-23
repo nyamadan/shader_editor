@@ -22,6 +22,7 @@
 #include "image.hpp"
 #include "recording.hpp"
 #include "buffers.hpp"
+#include "shader_files.hpp"
 
 namespace {
 
@@ -52,13 +53,7 @@ float lastCheckUpdate = 0;
 float timeStart = 0;
 uint64_t currentFrame = 0;
 
-std::vector<std::shared_ptr<Image>> imageFiles;
-int32_t numImageFileNames = 0;
-char** imageFileNames = nullptr;
-
-std::vector<std::shared_ptr<ShaderProgram>> shaderFiles;
-int32_t numShaderFileNames = 0;
-char** shaderFileNames = nullptr;
+ShaderFiles sf;
 
 Buffers buffers;
 
@@ -74,94 +69,6 @@ bool h264enabled = false;
 
 void glfwErrorCallback(int error, const char* description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
-}
-
-void deleteShaderFileNamse() {
-    if (shaderFileNames != nullptr) {
-        for (int64_t i = 0; i < numShaderFileNames; i++) {
-            delete[] shaderFileNames[i];
-        }
-        delete[] shaderFileNames;
-    }
-    shaderFileNames = nullptr;
-}
-
-void deleteImageFileNames() {
-    if (imageFileNames != nullptr) {
-        for (int64_t i = 0; i < numImageFileNames; i++) {
-            delete[] imageFileNames[i];
-        }
-        delete[] imageFileNames;
-    }
-    imageFileNames = nullptr;
-}
-
-void genShaderFileNames() {
-    deleteShaderFileNamse();
-
-    numShaderFileNames = static_cast<int32_t>(shaderFiles.size());
-    shaderFileNames = new char*[numShaderFileNames];
-
-    for (int64_t i = 0; i < numShaderFileNames; i++) {
-        std::string fileStr = shaderFiles[i]->getFragmentShader().getPath();
-        const int64_t fileNameLength = fileStr.size();
-        char* fileName = new char[fileNameLength + 1];
-        fileName[fileNameLength] = '\0';
-        fileStr.copy(fileName, fileNameLength, 0);
-        shaderFileNames[i] = fileName;
-    }
-}
-
-void genImageFileNames() {
-    deleteImageFileNames();
-
-    numImageFileNames = static_cast<int32_t>(imageFiles.size());
-    imageFileNames = new char*[numImageFileNames];
-    for (int64_t i = 0; i < numImageFileNames; i++) {
-        std::shared_ptr<Image> image = imageFiles[i];
-        const std::string& path = image->getPath();
-        const int64_t fileNameLength = path.size();
-        char* fileName = new char[fileNameLength + 1];
-        fileName[fileNameLength] = '\0';
-        image->getPath().copy(fileName, fileNameLength, 0);
-        imageFileNames[i] = fileName;
-    }
-}
-
-void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
-                           const std::string& vsPath,
-                           const std::string& fsPath) {
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
-    std::string vsSource;
-    std::string fsSource;
-    readText(vsPath, vsSource);
-    readText(fsPath, fsSource);
-    program->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
-}
-
-void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram,
-                             const std::string& fsSource) {
-    const std::string& vsPath = program->getVertexShader().getPath();
-    const std::string& fsPath = program->getFragmentShader().getPath();
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
-    const std::string& vsSource = program->getVertexShader().getSource();
-    newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
-}
-
-void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram) {
-    const std::string& vsPath = program->getVertexShader().getPath();
-    const std::string& fsPath = program->getFragmentShader().getPath();
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
-    std::string vsSource;
-    std::string fsSource;
-    readText(vsPath, vsSource);
-    readText(fsPath, fsSource);
-    newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
 void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
@@ -206,10 +113,7 @@ void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         newProgram->compile(vsPath, fsPath, vsSource, fsSource,
                                             vsTime, fsTime);
 
-                        shaderFiles.push_back(newProgram);
-                        genShaderFileNames();
-
-                        uiShader = numShaderFileNames - 1;
+                        uiShader = sf.pushNewProgram(newProgram);
 
                         program.swap(newProgram);
                     }
@@ -436,7 +340,8 @@ void update(void*) {
                 if (programErrors.begin() != programErrors.end()) {
                     cursorLine = programErrors.begin()->first - 1;
                 }
-                shaderFiles[uiShaderFileIndex] = newProgram;
+
+                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
 
                 SetProgramErrors(programErrors);
             }
@@ -458,7 +363,8 @@ void update(void*) {
             programErrors.begin() != programErrors.end()) {
             cursorLine = programErrors.begin()->first - 1;
         }
-        shaderFiles[uiShaderFileIndex] = newProgram;
+
+        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
 
         SetProgramErrors(programErrors);
     }
@@ -495,7 +401,7 @@ void update(void*) {
 
     usedTextures.clear();
 
-    if (numImageFileNames > 0) {
+    if (sf.getNumImageFileNames() > 0) {
         auto& uniforms = program->getUniforms();
         for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
             ShaderUniform& u = it->second;
@@ -503,11 +409,11 @@ void update(void*) {
             if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
                 int32_t& uiImage = uiImageFileNames[u.name];
 
-                if (uiImage < 0 || uiImage >= numImageFileNames) {
+                if (uiImage < 0 || uiImage >= sf.getNumImageFileNames()) {
                     uiImage = 0;
                 }
 
-                usedTextures[u.name] = imageFiles[uiImage];
+                usedTextures[u.name] = sf.getImage(uiImage);
             }
         }
     }
@@ -556,17 +462,16 @@ void update(void*) {
                 if (programErrors.begin() != programErrors.end()) {
                     cursorLine = programErrors.begin()->first - 1;
                 }
-                shaderFiles[uiShaderFileIndex] = newProgram;
+                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
 
                 SetProgramErrors(programErrors);
 
                 swapProgram(newProgram);
             }
 
-            if (ImGui::Combo("File", &uiShaderFileIndex, shaderFileNames,
-                             numShaderFileNames)) {
-                std::shared_ptr<ShaderProgram> newProgram =
-                    shaderFiles[uiShaderFileIndex];
+            if (ImGui::Combo("File", &uiShaderFileIndex, sf.getShaderFileNames(),
+                             sf.getNumShaderFileNames())) {
+                auto newProgram = sf.getShaderFile(uiShaderFileIndex);
 
                 if (uiShaderPlatformIndex == 1) {
                     newProgram->setFragmentShaderPreSource(shaderToyPreSource);
@@ -584,7 +489,7 @@ void update(void*) {
                     cursorLine = programErrors.begin()->first - 1;
                 }
 
-                shaderFiles[uiShaderFileIndex] = newProgram;
+                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
 
                 SetProgramErrors(programErrors);
 
@@ -628,11 +533,7 @@ void update(void*) {
 
                     SetProgramErrors(programErrors);
 
-                    shaderFiles.push_back(newProgram);
-                    uiShaderFileIndex = shaderFiles.size() - 1;
-                    genShaderFileNames();
-
-                    uiShaderFileIndex = numShaderFileNames - 1;
+                    uiShaderFileIndex = sf.pushNewProgram(newProgram);
 
                     program.swap(newProgram);
                 }
@@ -815,13 +716,13 @@ void update(void*) {
                         ImGui::DragInt(u.name.c_str(), &u.value.i);
                         break;
                     case UniformType::Sampler2D:
-                        if (numImageFileNames > 0) {
+                        if (sf.getNumImageFileNames() > 0) {
                             int32_t& uiImage = uiImageFileNames[u.name];
 
                             if (ImGui::Combo(u.name.c_str(), &uiImage,
-                                             imageFileNames,
-                                             numImageFileNames)) {
-                                usedTextures[u.name] = imageFiles[uiImage];
+                                             sf.getImageFileNames(),
+                                             sf.getNumImageFileNames())) {
+                                usedTextures[u.name] = sf.getImage(uiImage);
                             }
                         }
                         break;
@@ -1037,44 +938,6 @@ void update(void*) {
     glfwPollEvents();
 }
 
-void loadFiles(const std::string& path) {
-    AppLog::getInstance().addLog("Assets:\n");
-
-    std::vector<std::string> files = openDir(path);
-    for (auto iter = files.begin(); iter != files.end(); iter++) {
-        const std::string& file = *iter;
-        std::string ext = getExtention(*iter);
-        AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
-
-        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
-            std::shared_ptr<Image> image = std::make_shared<Image>();
-            image->setPath(path, *iter, ext);
-            imageFiles.push_back(image);
-        }
-
-        if (ext == ".glsl" || ext == ".frag") {
-            std::shared_ptr<ShaderProgram> newProgram =
-                std::make_shared<ShaderProgram>();
-
-            std::string vertexShaderPath = DefaultAssetPath;
-            appendPath(vertexShaderPath, DefaultVertexShaderName);
-
-            std::string fragmentShaderPath = path;
-            appendPath(fragmentShaderPath, file);
-
-            const int64_t vsTime = getMTime(vertexShaderPath);
-            const int64_t fsTime = getMTime(fragmentShaderPath);
-            std::string vsSource;
-            std::string fsSource;
-            readText(vertexShaderPath, vsSource);
-            readText(fragmentShaderPath, fsSource);
-            newProgram->setCompileInfo(vertexShaderPath, fragmentShaderPath,
-                                       vsSource, fsSource, vsTime, fsTime);
-            shaderFiles.push_back(newProgram);
-        }
-    }
-}
-
 #ifndef __EMSCRIPTEN__
 
 void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
@@ -1207,14 +1070,8 @@ int main(void) {
     buffers.initialize(windowWidth / 2, windowHeight / 2);
 
     // Load files.
-
-    loadFiles("./assets");
-
-    shaderFiles.insert(shaderFiles.begin(), program);
-
-    genImageFileNames();
-
-    genShaderFileNames();
+    sf.pushNewProgram(program);
+    sf.loadFiles("./assets", vertexShaderPath);
 
     timeStart = static_cast<float>(ImGui::GetTime());
 
@@ -1229,8 +1086,8 @@ int main(void) {
         update(nullptr);
     }
 
-    deleteImageFileNames();
-    deleteShaderFileNamse();
+    sf.deleteImageFileNames();
+    sf.deleteShaderFileNamse();
 
     recording->cleanup();
 

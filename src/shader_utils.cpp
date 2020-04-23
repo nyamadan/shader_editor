@@ -1,6 +1,8 @@
 #include "common.hpp"
 #include "shader_utils.hpp"
 #include "app_log.hpp"
+#include "shader_program.hpp"
+#include "file_utils.hpp"
 
 #include <iostream>
 
@@ -60,3 +62,40 @@ GLint checkCompiled(GLuint shader, std::string &error) {
 
     return success;
 };
+
+void compileShaderFromFile(
+    const std::shared_ptr<ShaderProgram> program, const std::string& vsPath,
+    const std::string& fsPath) {
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
+    std::string vsSource;
+    std::string fsSource;
+    readText(vsPath, vsSource);
+    readText(fsPath, fsSource);
+    program->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}
+
+void recompileFragmentShader(
+    const std::shared_ptr<ShaderProgram> program,
+    std::shared_ptr<ShaderProgram> newProgram, const std::string& fsSource) {
+    const std::string& vsPath = program->getVertexShader().getPath();
+    const std::string& fsPath = program->getFragmentShader().getPath();
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
+    const std::string& vsSource = program->getVertexShader().getSource();
+    newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}
+
+void recompileShaderFromFile(
+    const std::shared_ptr<ShaderProgram> program,
+    std::shared_ptr<ShaderProgram> newProgram) {
+    const std::string& vsPath = program->getVertexShader().getPath();
+    const std::string& fsPath = program->getFragmentShader().getPath();
+    const int64_t vsTime = getMTime(vsPath);
+    const int64_t fsTime = getMTime(fsPath);
+    std::string vsSource;
+    std::string fsSource;
+    readText(vsPath, vsSource);
+    readText(fsPath, fsSource);
+    newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
+}

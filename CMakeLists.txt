@@ -17,6 +17,7 @@ set(APP_SOURCES
     ${PROJECT_SOURCE_DIR}/src/h264_encoder.cpp
     ${PROJECT_SOURCE_DIR}/src/recording.cpp
     ${PROJECT_SOURCE_DIR}/src/buffers.cpp
+    ${PROJECT_SOURCE_DIR}/src/shader_files.cpp
 )
 
 set(GL3W_SOURCES
