@@ -4,6 +4,7 @@ project(shader_editor VERSION 0.0.1)
 set(MSVC_RUNTIME "dll")
 
 set(APP_SOURCES
+    ${PROJECT_SOURCE_DIR}/src/app.cpp
     ${PROJECT_SOURCE_DIR}/src/main.cpp
     ${PROJECT_SOURCE_DIR}/src/image.cpp
     ${PROJECT_SOURCE_DIR}/src/platform.cpp
