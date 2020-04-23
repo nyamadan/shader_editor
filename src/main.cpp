@@ -21,6 +21,7 @@
 #include "app_log.hpp"
 #include "image.hpp"
 #include "recording.hpp"
+#include "buffers.hpp"
 
 namespace {
 
@@ -35,9 +36,6 @@ std::string assetPath;
 int32_t windowWidth = 1024;
 int32_t windowHeight = 768;
 
-int32_t bufferWidth;
-int32_t bufferHeight;
-
 GLFWwindow* mainWindow = nullptr;
 
 GLuint vIndex = 0;
@@ -48,14 +46,6 @@ std::string shaderToyPreSource;
 
 std::shared_ptr<ShaderProgram> program;
 std::shared_ptr<ShaderProgram> copyProgram;
-
-int32_t writeBufferIndex = 0;
-int32_t readBufferIndex = 1;
-GLuint frameBuffers[2];
-GLuint depthBuffers[2];
-GLuint backBuffers[2];
-
-GLuint pixelBuffers[2];
 
 const float CheckInterval = 0.5f;
 float lastCheckUpdate = 0;
@@ -69,6 +59,8 @@ char** imageFileNames = nullptr;
 std::vector<std::shared_ptr<ShaderProgram>> shaderFiles;
 int32_t numShaderFileNames = 0;
 char** shaderFileNames = nullptr;
+
+Buffers buffers;
 
 TextEditor editor;
 
@@ -170,41 +162,6 @@ void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
     readText(vsPath, vsSource);
     readText(fsPath, fsSource);
     newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
-}
-
-void updateFrameBuffersSize(GLint width, GLint height) {
-    bufferWidth = width;
-    bufferHeight = height;
-
-    for (int32_t i = 0; i < 2; i++) {
-        glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[i]);
-        glBindRenderbuffer(GL_RENDERBUFFER, depthBuffers[i]);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
-                              bufferWidth, bufferHeight);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                                  GL_RENDERBUFFER, depthBuffers[i]);
-
-        glBindTexture(GL_TEXTURE_2D, backBuffers[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bufferWidth, bufferHeight, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, 0);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, backBuffers[i], 0);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[i]);
-        glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4L, 0,
-                     GL_STREAM_READ);
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    }
 }
 
 void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
@@ -357,32 +314,33 @@ void startRecord(const std::string& fileName, const int32_t uiVideoTypeIndex,
 
     switch (uiVideoResolution) {
         case 0:
-            updateFrameBuffersSize(256, 144);
+            buffers.updateFrameBuffersSize(256, 144);
             break;
         case 1:
-            updateFrameBuffersSize(427, 240);
+            buffers.updateFrameBuffersSize(427, 240);
             break;
         case 2:
-            updateFrameBuffersSize(640, 360);
+            buffers.updateFrameBuffersSize(640, 360);
             break;
         case 3:
-            updateFrameBuffersSize(720, 480);
+            buffers.updateFrameBuffersSize(720, 480);
             break;
         case 4:
-            updateFrameBuffersSize(1280, 720);
+            buffers.updateFrameBuffersSize(1280, 720);
             break;
         case 5:
-            updateFrameBuffersSize(1920, 1080);
+            buffers.updateFrameBuffersSize(1920, 1080);
             break;
         case 6:
-            updateFrameBuffersSize(2560, 1440);
+            buffers.updateFrameBuffersSize(2560, 1440);
             break;
         case 7:
-            updateFrameBuffersSize(3840, 2160);
+            buffers.updateFrameBuffersSize(3840, 2160);
             break;
     }
 
-    recording->start(bufferWidth, bufferHeight, fileName, uiVideoTypeIndex, kbps, encodeDeadline);
+    recording->start(buffers.getWidth(), buffers.getHeight(), fileName,
+                     uiVideoTypeIndex, kbps, encodeDeadline);
 }
 
 void update(void*) {
@@ -516,7 +474,7 @@ void update(void*) {
     // onResizeWindow
     if (!recording->getIsRecording() &&
         (currentWidth != windowWidth || currentHeight != windowHeight)) {
-        updateFrameBuffersSize(static_cast<GLint>(currentWidth * bufferScale),
+        buffers.updateFrameBuffersSize(static_cast<GLint>(currentWidth * bufferScale),
                                static_cast<GLint>(currentHeight * bufferScale));
     }
 
@@ -896,7 +854,7 @@ void update(void*) {
                 bufferScale =
                     1.0f /
                     powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
-                updateFrameBuffersSize(
+                buffers.updateFrameBuffersSize(
                     static_cast<GLint>(currentWidth * bufferScale),
                     static_cast<GLint>(currentHeight * bufferScale));
             }
@@ -906,7 +864,7 @@ void update(void*) {
             ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
 
             std::stringstream bufferStringStream;
-            bufferStringStream << bufferWidth << ", " << bufferHeight;
+            bufferStringStream << buffers.getWidth() << ", " << buffers.getHeight();
             ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
             ImGui::End();
         }
@@ -946,14 +904,14 @@ void update(void*) {
 
     ImGui::Render();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffers[writeBufferIndex]);
-    glViewport(0, 0, bufferWidth, bufferHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, buffers.getFrameBuffer(WRITE));
+    glViewport(0, 0, buffers.getWidth(), buffers.getHeight());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // uniform values
     program->setUniformValue(uResolutionName,
-                             glm::vec2(static_cast<GLfloat>(bufferWidth),
-                                       static_cast<GLfloat>(bufferHeight)));
+                             glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
+                                       static_cast<GLfloat>(buffers.getHeight())));
 
     switch (uiShaderPlatformIndex) {
         case 0:
@@ -1015,7 +973,7 @@ void update(void*) {
         }
 
         glActiveTexture(GL_TEXTURE0 + channel);
-        glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+        glBindTexture(GL_TEXTURE_2D, buffers.getBackBuffer(READ));
         program->setUniformValue(uBackbuffer, channel++);
         program->applyUniforms();
 
@@ -1028,13 +986,13 @@ void update(void*) {
         bool isLastFrame = uiTimeValue >= uiVideoTime;
 
         recording->update(isLastFrame, currentFrame,
-                          pixelBuffers[writeBufferIndex],
-                          pixelBuffers[readBufferIndex]);
+                          buffers.getPixelBuffer(WRITE),
+                          buffers.getPixelBuffer(READ));
 
         if(isLastFrame) {
             bufferScale =
                 1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
-            updateFrameBuffersSize(
+            buffers.updateFrameBuffersSize(
                 static_cast<GLint>(currentWidth * bufferScale),
                 static_cast<GLint>(currentHeight * bufferScale));
         }
@@ -1047,7 +1005,7 @@ void update(void*) {
     }
 
     // swap buffer
-    std::swap(writeBufferIndex, readBufferIndex);
+    buffers.swap();
 
     // copy to frontbuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1056,7 +1014,7 @@ void update(void*) {
     glUseProgram(copyProgram->getProgram());
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, backBuffers[readBufferIndex]);
+    glBindTexture(GL_TEXTURE_2D, buffers.getBackBuffer(READ));
 
     copyProgram->setUniformValue("backbuffer", 0);
     copyProgram->setUniformValue("resolution",
@@ -1246,16 +1204,7 @@ int main(void) {
     glBindVertexArray(0);
 
     // Framebuffers
-    glGenFramebuffers(2, frameBuffers);
-    glGenRenderbuffers(2, depthBuffers);
-    glGenTextures(2, backBuffers);
-    glGenBuffers(2, pixelBuffers);
-
-    updateFrameBuffersSize(windowWidth / 2, windowHeight / 2);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    buffers.initialize(windowWidth / 2, windowHeight / 2);
 
     // Load files.
 
