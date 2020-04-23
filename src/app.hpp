@@ -45,8 +45,6 @@ class App {
     std::map<std::string, int32_t> uiImageFileNames;
     std::map<int32_t, std::string> programErrors;
 
-    std::string assetPath;
-
     int32_t windowWidth = 1024;
     int32_t windowHeight = 768;
 
@@ -73,14 +71,10 @@ class App {
     std::unique_ptr<Recording> recording = std::make_unique<Recording>();
     bool h264enabled = false;
 
-   public:
-    GLFWwindow *getMainWindow();
-
     void startRecord(const std::string& fileName,
                      const int32_t uiVideoTypeIndex,
                      const int32_t uiVideoResolution, const int32_t kbps,
                      unsigned long encodeDeadline, float& uiTimeValue);
-    void update(void*);
 
     void App::SetProgramErrors(std::map<int32_t, std::string>& programErrors);
 
@@ -88,7 +82,17 @@ class App {
     void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                              int32_t uiPlatform);
 
+   public:
+    GLFWwindow* getMainWindow();
+
+    void update(void*);
     int32_t start();
+
+    void onUiCaptureWindow();
+    void onUiStatsWindow();
+    void onUiTimeWindow(float now);
+    void onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
+                              int32_t& currentHeight);
 
     void cleanup();
 };

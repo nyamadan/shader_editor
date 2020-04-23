@@ -79,7 +79,6 @@ void App::update(void*) {
     int32_t cursorLine = -1;
 
     float now = static_cast<float>(ImGui::GetTime());
-    unsigned long encodeDeadline = VPX_DL_GOOD_QUALITY;
 
     const char* uMouseName = nullptr;
     const char* uResolutionName = nullptr;
@@ -339,146 +338,15 @@ void App::update(void*) {
         }
 
         if (uiTimeWindow) {
-            ImGui::Begin("Time", &uiTimeWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            if (uiPlaying) {
-                ImGui::LabelText("time", "%s",
-                                 std::to_string(uiTimeValue).c_str());
-            } else {
-                ImGui::DragFloat("time", &uiTimeValue, 0.5f);
-            }
-
-            ImGui::Checkbox("Playing", &uiPlaying);
-
-            if (ImGui::Button("Reset")) {
-                timeStart = now;
-                uiTimeValue = 0;
-                currentFrame = 0;
-            }
-            ImGui::End();
+            onUiTimeWindow(now);
         }
 
         if (uiCaptureWindow) {
-            ImGui::Begin("Export Video", &uiCaptureWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            const char* resolutionItems[] = {
-                "256x144",  "427x240",   "640x360",   "720x480",
-                "1280x720", "1920x1080", "2560x1440", "3840x2160"};
-
-            const char* typeItems[] = {"I420", "WebM", "MP4"};
-
-            ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
-                         IM_ARRAYSIZE(resolutionItems));
-
-            ImGui::Combo("format", &uiVideoTypeIndex, typeItems,
-                         IM_ARRAYSIZE(typeItems) - (h264enabled ? 0 : 1));
-
-            if (uiVideoTypeIndex == 1) {
-                const char* qualityItems[] = {"fast", "good", "best"};
-
-                ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
-                             IM_ARRAYSIZE(qualityItems));
-
-                switch (uiVideoQualityIndex) {
-                    case 0:
-                        encodeDeadline = VPX_DL_REALTIME;
-                        break;
-                    case 1:
-                        encodeDeadline = VPX_DL_GOOD_QUALITY;
-                        break;
-                    case 2:
-                        encodeDeadline = VPX_DL_BEST_QUALITY;
-                        break;
-                }
-
-                ImGui::DragFloat("Mbps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
-            }
-
-            ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
-
-            std::stringstream ss;
-            ss.str(std::string());
-            ss << 30000.0f / 1001.0f << " hz";
-            ImGui::LabelText("framerate", "%s", ss.str().c_str());
-
-            std::string fileName;
-            const char* const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
-            const char* const y4mExt = "y4m";
-            const char* const webmFilter = "Video file (*.webm)\0*.webm\0";
-            const char* const webmExt = "webm";
-            const char* const mp4Filter = "Video file (*.mp4)\0*.mp4\0";
-            const char* const mp4Ext = "mp4";
-            const char* filter = nullptr;
-            const char* ext = nullptr;
-            bool ok = false;
-
-            if (ImGui::Button("Export")) {
-                switch (uiVideoTypeIndex) {
-                    case 0: {
-                        fileName = "video.y4m";
-                        filter = y4mFilter;
-                        ext = y4mExt;
-                    } break;
-                    case 1: {
-                        fileName = "video.webm";
-                        filter = webmFilter;
-                        ext = webmExt;
-                    } break;
-                    case 2: {
-                        fileName = "video.mp4";
-                        filter = mp4Filter;
-                        ext = mp4Ext;
-                    } break;
-                }
-
-#if defined(_MSC_VER) || defined(__MINGW32__)
-                ok = saveFileDialog(fileName, filter, ext);
-#else
-                ok = true;
-#endif
-                if (ok) {
-                    startRecord(fileName, uiVideoTypeIndex,
-                                uiVideoResolutionIndex,
-                                static_cast<int32_t>(uiVideoMbps * 1000.0f),
-                                encodeDeadline, uiTimeValue);
-                    ImGui::OpenPopup("Export Progress");
-                }
-            }
-
-            if (ImGui::BeginPopupModal("Export Progress", NULL,
-                                       ImGuiWindowFlags_AlwaysAutoResize)) {
-                if (!recording->getIsRecording()) {
-                    ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
-
-                    ImGui::Separator();
-
-                    if (ImGui::Button("OK", ImVec2(120, 0))) {
-                        ImGui::CloseCurrentPopup();
-                    }
-                } else {
-                    float value = uiTimeValue / uiVideoTime;
-                    ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
-                }
-
-                ImGui::EndPopup();
-            }
-            ImGui::End();
+            onUiCaptureWindow();
         }
 
         if (uiStatsWindow) {
-            ImGui::Begin("Stats", &uiStatsWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-
-            std::stringstream ss;
-
-            ss.str(std::string());
-            ss << 1000.0f / ImGui::GetIO().Framerate;
-            ImGui::LabelText("ms/frame", "%s", ss.str().c_str());
-
-            ss.str(std::string());
-            ss << ImGui::GetIO().Framerate;
-            ImGui::LabelText("fps", "%s", ss.str().c_str());
-            ImGui::End();
+            onUiStatsWindow();
         }
 
         if (uiUniformWindow) {
@@ -539,29 +407,7 @@ void App::update(void*) {
         }
 
         if (uiBackBufferWindow) {
-            ImGui::Begin("BackBuffer", &uiBackBufferWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            const char* const items[] = {"0.5", "1", "2", "4", "8"};
-            if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
-                             IM_ARRAYSIZE(items))) {
-                // update framebuffers
-                bufferScale =
-                    1.0f /
-                    powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
-                buffers.updateFrameBuffersSize(
-                    static_cast<GLint>(currentWidth * bufferScale),
-                    static_cast<GLint>(currentHeight * bufferScale));
-            }
-
-            std::stringstream windowStringStream;
-            windowStringStream << windowWidth << ", " << windowHeight;
-            ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
-
-            std::stringstream bufferStringStream;
-            bufferStringStream << buffers.getWidth() << ", "
-                               << buffers.getHeight();
-            ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
-            ImGui::End();
+            onUiBackBufferWindow(bufferScale, currentWidth, currentHeight);
         }
 
         if (uiErrorWindow) {
@@ -1031,3 +877,169 @@ void App::cleanup() {
 }
 
 GLFWwindow* App::getMainWindow() { return mainWindow; }
+
+void App::onUiCaptureWindow() {
+    unsigned long encodeDeadline = VPX_DL_GOOD_QUALITY;
+
+    ImGui::Begin("Export Video", &uiCaptureWindow,
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    const char* resolutionItems[] = {"256x144",   "427x240",  "640x360",
+                                     "720x480",   "1280x720", "1920x1080",
+                                     "2560x1440", "3840x2160"};
+
+    const char* typeItems[] = {"I420", "WebM", "MP4"};
+
+    ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
+                 IM_ARRAYSIZE(resolutionItems));
+
+    ImGui::Combo("format", &uiVideoTypeIndex, typeItems,
+                 IM_ARRAYSIZE(typeItems) - (h264enabled ? 0 : 1));
+
+    if (uiVideoTypeIndex == 1) {
+        const char* qualityItems[] = {"fast", "good", "best"};
+
+        ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
+                     IM_ARRAYSIZE(qualityItems));
+
+        switch (uiVideoQualityIndex) {
+            case 0:
+                encodeDeadline = VPX_DL_REALTIME;
+                break;
+            case 1:
+                encodeDeadline = VPX_DL_GOOD_QUALITY;
+                break;
+            case 2:
+                encodeDeadline = VPX_DL_BEST_QUALITY;
+                break;
+        }
+
+        ImGui::DragFloat("Mbps", &uiVideoMbps, 0.1f, 0.5f, 15.0f);
+    }
+
+    ImGui::DragFloat("seconds", &uiVideoTime, 0.5f, 0.5f, 600.0f, "%f");
+
+    std::stringstream ss;
+    ss.str(std::string());
+    ss << 30000.0f / 1001.0f << " hz";
+    ImGui::LabelText("framerate", "%s", ss.str().c_str());
+
+    std::string fileName;
+    const char* const y4mFilter = "Video file (*.y4m)\0*.y4m\0";
+    const char* const y4mExt = "y4m";
+    const char* const webmFilter = "Video file (*.webm)\0*.webm\0";
+    const char* const webmExt = "webm";
+    const char* const mp4Filter = "Video file (*.mp4)\0*.mp4\0";
+    const char* const mp4Ext = "mp4";
+    const char* filter = nullptr;
+    const char* ext = nullptr;
+    bool ok = false;
+
+    if (ImGui::Button("Export")) {
+        switch (uiVideoTypeIndex) {
+            case 0: {
+                fileName = "video.y4m";
+                filter = y4mFilter;
+                ext = y4mExt;
+            } break;
+            case 1: {
+                fileName = "video.webm";
+                filter = webmFilter;
+                ext = webmExt;
+            } break;
+            case 2: {
+                fileName = "video.mp4";
+                filter = mp4Filter;
+                ext = mp4Ext;
+            } break;
+        }
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+        ok = saveFileDialog(fileName, filter, ext);
+#else
+        ok = true;
+#endif
+        if (ok) {
+            startRecord(fileName, uiVideoTypeIndex, uiVideoResolutionIndex,
+                        static_cast<int32_t>(uiVideoMbps * 1000.0f),
+                        encodeDeadline, uiTimeValue);
+            ImGui::OpenPopup("Export Progress");
+        }
+    }
+
+    if (ImGui::BeginPopupModal("Export Progress", NULL,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (!recording->getIsRecording()) {
+            ImGui::ProgressBar(1.0f, ImVec2(200.0f, 15.0f));
+
+            ImGui::Separator();
+
+            if (ImGui::Button("OK", ImVec2(120, 0))) {
+                ImGui::CloseCurrentPopup();
+            }
+        } else {
+            float value = uiTimeValue / uiVideoTime;
+            ImGui::ProgressBar(value, ImVec2(200.0f, 15.0f));
+        }
+
+        ImGui::EndPopup();
+    }
+    ImGui::End();
+}
+
+void App::onUiStatsWindow() {
+    ImGui::Begin("Stats", &uiStatsWindow, ImGuiWindowFlags_AlwaysAutoResize);
+
+    std::stringstream ss;
+
+    ss.str(std::string());
+    ss << 1000.0f / ImGui::GetIO().Framerate;
+    ImGui::LabelText("ms/frame", "%s", ss.str().c_str());
+
+    ss.str(std::string());
+    ss << ImGui::GetIO().Framerate;
+    ImGui::LabelText("fps", "%s", ss.str().c_str());
+    ImGui::End();
+}
+
+void App::onUiTimeWindow(float now) {
+    ImGui::Begin("Time", &uiTimeWindow, ImGuiWindowFlags_AlwaysAutoResize);
+    if (uiPlaying) {
+        ImGui::LabelText("time", "%s", std::to_string(uiTimeValue).c_str());
+    } else {
+        ImGui::DragFloat("time", &uiTimeValue, 0.5f);
+    }
+
+    ImGui::Checkbox("Playing", &uiPlaying);
+
+    if (ImGui::Button("Reset")) {
+        timeStart = now;
+        uiTimeValue = 0;
+        currentFrame = 0;
+    }
+    ImGui::End();
+}
+
+void App::onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
+                               int32_t& currentHeight) {
+    ImGui::Begin("BackBuffer", &uiBackBufferWindow,
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    const char* const items[] = {"0.5", "1", "2", "4", "8"};
+    if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
+                     IM_ARRAYSIZE(items))) {
+        // update framebuffers
+        bufferScale =
+            1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
+        buffers.updateFrameBuffersSize(
+            static_cast<GLint>(currentWidth * bufferScale),
+            static_cast<GLint>(currentHeight * bufferScale));
+    }
+
+    std::stringstream windowStringStream;
+    windowStringStream << windowWidth << ", " << windowHeight;
+    ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
+
+    std::stringstream bufferStringStream;
+    bufferStringStream << buffers.getWidth() << ", " << buffers.getHeight();
+    ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
+    ImGui::End();
+}
