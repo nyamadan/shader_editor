@@ -1,7 +1,7 @@
 #include "app.hpp"
 
 namespace {
-App app;
+shader_editor::App app;
 
 void update(void *) {
     app.update(nullptr);

@@ -49,9 +49,16 @@ void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
         case GL_DEBUG_SEVERITY_NOTIFICATION:
             break;
         case GL_DEBUG_SEVERITY_LOW:
+            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_LOW(%X): %s\n", eid,
+                                         message);
+            break;
         case GL_DEBUG_SEVERITY_MEDIUM:
+            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_MEDIUM(%X): %s\n",
+                                         eid, message);
+            break;
         case GL_DEBUG_SEVERITY_HIGH:
-            AppLog::getInstance().addLog("ERROR(%X): %s\n", eid, message);
+            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_HIGH(%X): %s\n",
+                                         eid, message);
             break;
     }
 }
@@ -70,8 +77,32 @@ void EnableOpenGLDebugExtention() {
 #endif
 }  // namespace
 
+namespace shader_editor {
+UniformNames App::getUniformNames(ShaderPlatform platform) {
+    UniformNames uNames;
+    switch (platform) {
+        case GLSL_SANDBOX:
+            uNames.time = "time";
+            uNames.resolution = "resolution";
+            uNames.mouse = "mouse";
+            uNames.backbuffer = "backbuffer";
+            uNames.frame = "";
+            break;
+        case SHADER_TOY:
+            uNames.time = "iTime";
+            uNames.resolution = "iResolution";
+            uNames.mouse = "iMouse";
+            uNames.frame = "iFrame";
+            uNames.backbuffer = "";
+            break;
+    }
+
+    return uNames;
+}
+
 void App::update(void*) {
     std::map<std::string, std::shared_ptr<Image>> usedTextures;
+
     int currentWidth, currentHeight;
     float bufferScale =
         1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
@@ -80,28 +111,7 @@ void App::update(void*) {
 
     float now = static_cast<float>(ImGui::GetTime());
 
-    const char* uMouseName = nullptr;
-    const char* uResolutionName = nullptr;
-    const char* uTimeName = nullptr;
-    const char* uFrameName = nullptr;
-    const char* uBackbuffer = nullptr;
-
-    switch (uiShaderPlatformIndex) {
-        case 0:
-            uTimeName = "time";
-            uResolutionName = "resolution";
-            uMouseName = "mouse";
-            uBackbuffer = "backbuffer";
-            uFrameName = "";
-            break;
-        case 1:
-            uTimeName = "iTime";
-            uResolutionName = "iResolution";
-            uMouseName = "iMouse";
-            uFrameName = "iFrame";
-            uBackbuffer = "";
-            break;
-    }
+    auto uNames = getUniformNames(uiShaderPlatformIndex);
 
     glfwMakeContextCurrent(mainWindow);
     glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
@@ -192,24 +202,7 @@ void App::update(void*) {
         }
     }
 
-    usedTextures.clear();
-
-    if (sf.getNumImageFileNames() > 0) {
-        auto& uniforms = program->getUniforms();
-        for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-            ShaderUniform& u = it->second;
-
-            if (u.type == UniformType::Sampler2D && u.name != uBackbuffer) {
-                int32_t& uiImage = uiImageFileNames[u.name];
-
-                if (uiImage < 0 || uiImage >= sf.getNumImageFileNames()) {
-                    uiImage = 0;
-                }
-
-                usedTextures[u.name] = sf.getImage(uiImage);
-            }
-        }
-    }
+    getUsedTextures(uNames, usedTextures);
 
     if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
         uiDebugWindow = !uiDebugWindow;
@@ -235,106 +228,7 @@ void App::update(void*) {
         ImGui::End();
 
         if (uiShaderFileWindow) {
-            ImGui::Begin("File", &uiShaderFileWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-
-            const char* const items[] = {"glslsandbox", "shadertoy"};
-            if (ImGui::Combo("platform", &uiShaderPlatformIndex, items,
-                             IM_ARRAYSIZE(items))) {
-                std::shared_ptr<ShaderProgram> newProgram =
-                    std::make_shared<ShaderProgram>();
-
-                if (uiShaderPlatformIndex == 1) {
-                    newProgram->setFragmentShaderPreSource(shaderToyPreSource);
-                } else {
-                    newProgram->setFragmentShaderPreSource(std::string());
-                }
-
-                recompileFragmentShader(program, newProgram, editor.GetText());
-                programErrors = newProgram->getFragmentShader().getErrors();
-                if (programErrors.begin() != programErrors.end()) {
-                    cursorLine = programErrors.begin()->first - 1;
-                }
-                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
-
-                SetProgramErrors(programErrors);
-
-                swapProgram(newProgram);
-            }
-
-            if (ImGui::Combo("File", &uiShaderFileIndex,
-                             sf.getShaderFileNames(),
-                             sf.getNumShaderFileNames())) {
-                auto newProgram = sf.getShaderFile(uiShaderFileIndex);
-
-                if (uiShaderPlatformIndex == 1) {
-                    newProgram->setFragmentShaderPreSource(shaderToyPreSource);
-                } else {
-                    newProgram->setFragmentShaderPreSource(std::string());
-                }
-
-                newProgram->compile();
-
-                editor.SetText(newProgram->getFragmentShader().getSource());
-                editor.SetCursorPosition(TextEditor::Coordinates());
-
-                programErrors = newProgram->getFragmentShader().getErrors();
-                if (programErrors.begin() != programErrors.end()) {
-                    cursorLine = programErrors.begin()->first - 1;
-                }
-
-                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
-
-                SetProgramErrors(programErrors);
-
-                swapProgram(newProgram);
-            }
-
-            ImGui::Checkbox("TextEditor", &uiShowTextEditor);
-
-            if (uiShowTextEditor) {
-                ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
-                               uiShaderPlatformIndex);
-                if (cursorLine >= 0) {
-                    editor.SetCursorPosition(
-                        TextEditor::Coordinates(cursorLine, 0));
-                    cursorLine = -1;
-                }
-            }
-
-#if defined(_MSC_VER) || defined(__MINGW32__)
-            if (ImGui::Button("Open")) {
-                std::string path;
-
-                if (openFileDialog(path, "Shader file (*.glsl)\0*.glsl\0")) {
-                    std::shared_ptr<ShaderProgram> newProgram =
-                        std::make_shared<ShaderProgram>();
-
-                    if (uiShaderPlatformIndex == 1) {
-                        newProgram->setFragmentShaderPreSource(
-                            shaderToyPreSource);
-                    }
-
-                    compileShaderFromFile(
-                        newProgram, program->getVertexShader().getPath(), path);
-                    editor.SetText(newProgram->getFragmentShader().getSource());
-                    editor.SetCursorPosition(TextEditor::Coordinates());
-
-                    programErrors = newProgram->getFragmentShader().getErrors();
-                    if (programErrors.begin() != programErrors.end()) {
-                        cursorLine = programErrors.begin()->first - 1;
-                    }
-
-                    SetProgramErrors(programErrors);
-
-                    uiShaderFileIndex = sf.pushNewProgram(newProgram);
-
-                    program.swap(newProgram);
-                }
-            }
-#endif
-
-            ImGui::End();
+            onUiShaderFileWindow(cursorLine);
         }
 
         if (uiTimeWindow) {
@@ -350,60 +244,7 @@ void App::update(void*) {
         }
 
         if (uiUniformWindow) {
-            ImGui::Begin("Uniforms", &uiUniformWindow,
-                         ImGuiWindowFlags_AlwaysAutoResize);
-            std::map<const std::string, ShaderUniform>& uniforms =
-                program->getUniforms();
-            for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-                const std::string& name = it->first;
-                ShaderUniform& u = it->second;
-                if (u.location < 0) {
-                    continue;
-                }
-
-                if (u.name == uTimeName || u.name == uResolutionName ||
-                    u.name == uMouseName || u.name == uFrameName ||
-                    u.name == uBackbuffer) {
-                    ImGui::LabelText(u.name.c_str(), "%s",
-                                     u.toString().c_str());
-                    continue;
-                }
-
-                switch (u.type) {
-                    case UniformType::Float:
-                        ImGui::DragFloat(u.name.c_str(), &u.value.f);
-                        break;
-                    case UniformType::Integer:
-                        ImGui::DragInt(u.name.c_str(), &u.value.i);
-                        break;
-                    case UniformType::Sampler2D:
-                        if (sf.getNumImageFileNames() > 0) {
-                            int32_t& uiImage = uiImageFileNames[u.name];
-
-                            if (ImGui::Combo(u.name.c_str(), &uiImage,
-                                             sf.getImageFileNames(),
-                                             sf.getNumImageFileNames())) {
-                                usedTextures[u.name] = sf.getImage(uiImage);
-                            }
-                        }
-                        break;
-                    case UniformType::Vector1:
-                        break;
-                    case UniformType::Vector2:
-                        ImGui::DragFloat2(u.name.c_str(),
-                                          glm::value_ptr(u.value.vec2));
-                        break;
-                    case UniformType::Vector3:
-                        ImGui::DragFloat3(u.name.c_str(),
-                                          glm::value_ptr(u.value.vec3));
-                        break;
-                    case UniformType::Vector4:
-                        ImGui::DragFloat4(u.name.c_str(),
-                                          glm::value_ptr(u.value.vec4));
-                        break;
-                }
-            }
-            ImGui::End();
+            onUiUniformWindow(uNames, usedTextures);
         }
 
         if (uiBackBufferWindow) {
@@ -451,40 +292,41 @@ void App::update(void*) {
 
     // uniform values
     program->setUniformValue(
-        uResolutionName, glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
-                                   static_cast<GLfloat>(buffers.getHeight())));
+        uNames.resolution,
+        glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
+                  static_cast<GLfloat>(buffers.getHeight())));
 
     switch (uiShaderPlatformIndex) {
         case 0:
             if (recording->getIsRecording()) {
-                program->setUniformValue(uMouseName, glm::vec2(0.5f, 0.5f));
+                program->setUniformValue(uNames.mouse, glm::vec2(0.5f, 0.5f));
             } else {
                 program->setUniformValue(
-                    uMouseName, glm::vec2(mousePos.x / windowWidth,
-                                          1.0f - mousePos.y / windowHeight));
+                    uNames.mouse, glm::vec2(mousePos.x / windowWidth,
+                                            1.0f - mousePos.y / windowHeight));
             }
             break;
         case 1:
-            program->setUniformValue(uFrameName,
+            program->setUniformValue(uNames.frame,
                                      static_cast<int>(currentFrame));
 
             if (recording->getIsRecording()) {
                 program->setUniformValue(
-                    uMouseName, glm::vec4(0.5f * windowWidth,
-                                          0.5f * windowHeight, 0.0f, 0.0f));
+                    uNames.mouse, glm::vec4(0.5f * windowWidth,
+                                            0.5f * windowHeight, 0.0f, 0.0f));
             } else {
                 if (mouseDown[0] || mouseDown[1]) {
                     program->setUniformValue(
-                        uMouseName,
+                        uNames.mouse,
                         glm::vec4(mousePos.x, windowHeight - mousePos.y,
                                   mouseDown[0] ? 1.0f : 0.0f,
                                   mouseDown[1] ? 1.0f : 0.0f));
                 } else {
-                    if (program->containsUniform(uMouseName)) {
+                    if (program->containsUniform(uNames.mouse)) {
                         const glm::vec4& prevMousePos =
-                            program->getUniform(uMouseName).value.vec4;
+                            program->getUniform(uNames.mouse).value.vec4;
                         program->setUniformValue(
-                            uMouseName,
+                            uNames.mouse,
                             glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
                     }
                 }
@@ -492,7 +334,7 @@ void App::update(void*) {
             break;
     }
 
-    program->setUniformValue(uTimeName, uiTimeValue);
+    program->setUniformValue(uNames.time, uiTimeValue);
 
     if (program->isOK()) {
         glUseProgram(program->getProgram());
@@ -515,7 +357,7 @@ void App::update(void*) {
 
         glActiveTexture(GL_TEXTURE0 + channel);
         glBindTexture(GL_TEXTURE_2D, buffers.getBackBuffer(READ));
-        program->setUniformValue(uBackbuffer, channel++);
+        program->setUniformValue(uNames.backbuffer, channel++);
         program->applyUniforms();
 
         glBindVertexArray(vertexArraysObject);
@@ -876,6 +718,29 @@ void App::cleanup() {
     h264encoder::UnloadEncoderLibrary();
 }
 
+void App::getUsedTextures(
+    const UniformNames& uNames,
+    std::map<std::string, std::shared_ptr<Image>>& usedTextures) {
+    usedTextures.clear();
+    if (sf.getNumImageFileNames() > 0) {
+        auto& uniforms = program->getUniforms();
+        for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
+            ShaderUniform& u = it->second;
+
+            if (u.type == UniformType::Sampler2D &&
+                u.name != uNames.backbuffer) {
+                int32_t& uiImage = uiImageFileNames[u.name];
+
+                if (uiImage < 0 || uiImage >= sf.getNumImageFileNames()) {
+                    uiImage = 0;
+                }
+
+                usedTextures[u.name] = sf.getImage(uiImage);
+            }
+        }
+    }
+}
+
 GLFWwindow* App::getMainWindow() { return mainWindow; }
 
 void App::onUiCaptureWindow() {
@@ -1043,3 +908,159 @@ void App::onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
     ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
     ImGui::End();
 }
+
+void App::onUiUniformWindow(
+    const UniformNames& uNames,
+    std::map<std::string, std::shared_ptr<Image>>& usedTextures) {
+    ImGui::Begin("Uniforms", &uiUniformWindow,
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    std::map<const std::string, ShaderUniform>& uniforms =
+        program->getUniforms();
+    for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
+        const std::string& name = it->first;
+        ShaderUniform& u = it->second;
+        if (u.location < 0) {
+            continue;
+        }
+
+        if (u.name == uNames.time || u.name == uNames.resolution ||
+            u.name == uNames.mouse || u.name == uNames.frame ||
+            u.name == uNames.backbuffer) {
+            ImGui::LabelText(u.name.c_str(), "%s", u.toString().c_str());
+            continue;
+        }
+
+        switch (u.type) {
+            case UniformType::Float:
+                ImGui::DragFloat(u.name.c_str(), &u.value.f);
+                break;
+            case UniformType::Integer:
+                ImGui::DragInt(u.name.c_str(), &u.value.i);
+                break;
+            case UniformType::Sampler2D:
+                if (sf.getNumImageFileNames() > 0) {
+                    int32_t& uiImage = uiImageFileNames[u.name];
+
+                    if (ImGui::Combo(u.name.c_str(), &uiImage,
+                                     sf.getImageFileNames(),
+                                     sf.getNumImageFileNames())) {
+                        usedTextures[u.name] = sf.getImage(uiImage);
+                    }
+                }
+                break;
+            case UniformType::Vector1:
+                break;
+            case UniformType::Vector2:
+                ImGui::DragFloat2(u.name.c_str(), glm::value_ptr(u.value.vec2));
+                break;
+            case UniformType::Vector3:
+                ImGui::DragFloat3(u.name.c_str(), glm::value_ptr(u.value.vec3));
+                break;
+            case UniformType::Vector4:
+                ImGui::DragFloat4(u.name.c_str(), glm::value_ptr(u.value.vec4));
+                break;
+        }
+    }
+    ImGui::End();
+}
+
+void App::onUiShaderFileWindow(int32_t& cursorLine) {
+    ImGui::Begin("File", &uiShaderFileWindow,
+                 ImGuiWindowFlags_AlwaysAutoResize);
+
+    const char* const items[] = {"glslsandbox", "shadertoy"};
+    if (ImGui::Combo("platform", (int*)&uiShaderPlatformIndex, items,
+                     IM_ARRAYSIZE(items))) {
+        std::shared_ptr<ShaderProgram> newProgram =
+            std::make_shared<ShaderProgram>();
+
+        if (uiShaderPlatformIndex == 1) {
+            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+        } else {
+            newProgram->setFragmentShaderPreSource(std::string());
+        }
+
+        recompileFragmentShader(program, newProgram, editor.GetText());
+        programErrors = newProgram->getFragmentShader().getErrors();
+        if (programErrors.begin() != programErrors.end()) {
+            cursorLine = programErrors.begin()->first - 1;
+        }
+        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+
+        SetProgramErrors(programErrors);
+
+        swapProgram(newProgram);
+    }
+
+    if (ImGui::Combo("File", &uiShaderFileIndex, sf.getShaderFileNames(),
+                     sf.getNumShaderFileNames())) {
+        auto newProgram = sf.getShaderFile(uiShaderFileIndex);
+
+        if (uiShaderPlatformIndex == 1) {
+            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+        } else {
+            newProgram->setFragmentShaderPreSource(std::string());
+        }
+
+        newProgram->compile();
+
+        editor.SetText(newProgram->getFragmentShader().getSource());
+        editor.SetCursorPosition(TextEditor::Coordinates());
+
+        programErrors = newProgram->getFragmentShader().getErrors();
+        if (programErrors.begin() != programErrors.end()) {
+            cursorLine = programErrors.begin()->first - 1;
+        }
+
+        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+
+        SetProgramErrors(programErrors);
+
+        swapProgram(newProgram);
+    }
+
+    ImGui::Checkbox("TextEditor", &uiShowTextEditor);
+
+    if (uiShowTextEditor) {
+        ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
+                       uiShaderPlatformIndex);
+        if (cursorLine >= 0) {
+            editor.SetCursorPosition(TextEditor::Coordinates(cursorLine, 0));
+            cursorLine = -1;
+        }
+    }
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+    if (ImGui::Button("Open")) {
+        std::string path;
+
+        if (openFileDialog(path, "Shader file (*.glsl)\0*.glsl\0")) {
+            std::shared_ptr<ShaderProgram> newProgram =
+                std::make_shared<ShaderProgram>();
+
+            if (uiShaderPlatformIndex == 1) {
+                newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+            }
+
+            compileShaderFromFile(newProgram,
+                                  program->getVertexShader().getPath(), path);
+            editor.SetText(newProgram->getFragmentShader().getSource());
+            editor.SetCursorPosition(TextEditor::Coordinates());
+
+            programErrors = newProgram->getFragmentShader().getErrors();
+            if (programErrors.begin() != programErrors.end()) {
+                cursorLine = programErrors.begin()->first - 1;
+            }
+
+            SetProgramErrors(programErrors);
+
+            uiShaderFileIndex = sf.pushNewProgram(newProgram);
+
+            program.swap(newProgram);
+        }
+    }
+#endif
+
+    ImGui::End();
+}
+}  // namespace shader_editor

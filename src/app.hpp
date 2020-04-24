@@ -13,8 +13,24 @@
 #include "buffers.hpp"
 #include "recording.hpp"
 
+namespace shader_editor {
+struct UniformNames {
+    const char* mouse = nullptr;
+    const char* resolution = nullptr;
+    const char* time = nullptr;
+    const char* frame = nullptr;
+    const char* backbuffer = nullptr;
+};
+
+typedef enum {
+    GLSL_SANDBOX = 0,
+    SHADER_TOY = 1,
+} ShaderPlatform;
+
 class App {
    private:
+    static UniformNames getUniformNames(ShaderPlatform platform);
+
 #ifndef NDEBUG
     bool showImGuiDemoWindow = false;
 #endif
@@ -33,8 +49,8 @@ class App {
     float uiTimeValue = 0;
     bool uiPlaying = true;
 
+    ShaderPlatform uiShaderPlatformIndex = GLSL_SANDBOX;
     int32_t uiShaderFileIndex = 0;
-    int32_t uiShaderPlatformIndex = 0;
     int32_t uiBufferQualityIndex = 2;
     int32_t uiVideoResolutionIndex = 2;
     int32_t uiVideoTypeIndex = 0;
@@ -93,6 +109,16 @@ class App {
     void onUiTimeWindow(float now);
     void onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
                               int32_t& currentHeight);
+    void onUiUniformWindow(
+        const UniformNames& uNames,
+        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
+
+    void onUiShaderFileWindow(int32_t& cursorLine);
+
+    void getUsedTextures(
+        const UniformNames& uNames,
+        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
 
     void cleanup();
 };
+}  // namespace shader_editor
