@@ -1,7 +1,11 @@
 #include "common.hpp"
 #include "mp4muxer.h"
+#include "app_log.hpp"
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
 #include <windows.h>
+#endif
+
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
@@ -119,12 +123,23 @@ bool CreateOpenH264Encoder(void** ppEncoder, MP4E_mux_t** ppMP4Muxer,
 
     void* pEncoder = *ppEncoder;
 
-#ifndef NDEBUG
-    int32_t logLevel = 16;
+    int32_t logLevel = 1 << 1;
+
+    switch (AppLog::getInstance().getLogLevel()) {
+        case Debug: {
+            logLevel = 1 << 3;
+        } break;
+        case Info: {
+            logLevel = 1 << 2;
+        } break;
+        case Error: {
+            logLevel = 1 << 0;
+        } break;
+    }
+
     ((int32_t(*)(void*, int32_t, int32_t*))(*(void***)pEncoder)[7])(
         pEncoder, 25, &logLevel);
     assert(rv == 0);
-#endif
 
     uint8_t param[916];
     memset(param, 0, 916);

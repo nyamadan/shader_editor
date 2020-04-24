@@ -13,13 +13,13 @@ int64_t getMTime(const std::string &path);
 
 std::vector<std::string> openDir(std::string path);
 
-void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
+void compileShaderFromFile(const std::shared_ptr<shader_editor::ShaderProgram> program,
                            const std::string &vsPath,
                            const std::string &fsPath);
 
-void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram,
+void recompileFragmentShader(const std::shared_ptr<shader_editor::ShaderProgram> program,
+                             std::shared_ptr<shader_editor::ShaderProgram> newProgram,
                              const std::string &fsSource);
 
-void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram);
+void recompileShaderFromFile(const std::shared_ptr<shader_editor::ShaderProgram> program,
+                             std::shared_ptr<shader_editor::ShaderProgram> newProgram);

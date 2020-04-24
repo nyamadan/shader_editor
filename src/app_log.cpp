@@ -8,18 +8,23 @@ AppLog appLog;
 
 AppLog& AppLog::getInstance() { return appLog; }
 
+void AppLog::setLogLevel(AppLogLevel logLevel) {
+    this->logLevel = logLevel;
+}
+
+AppLogLevel AppLog::getLogLevel() {
+    return this->logLevel;
+}
+
 void AppLog::clear() {
     buf.clear();
     lineOffsets.clear();
     lineOffsets.push_back(0);
 }
 
-void AppLog::addLog(const char* fmt, ...) {
+void AppLog::addLog(va_list args, const char* fmt) {
     int old_size = buf.size();
-    va_list args;
-    va_start(args, fmt);
     buf.appendfv(fmt, args);
-    va_end(args);
 
     std::cout << buf.c_str() + old_size;
 
@@ -27,6 +32,40 @@ void AppLog::addLog(const char* fmt, ...) {
         if (buf[old_size] == '\n') lineOffsets.push_back(old_size + 1);
     scrolltoBottom = true;
 }
+
+void AppLog::debug(const char* fmt, ...) {
+    if(logLevel > AppLogLevel::Debug) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    addLog(args, fmt);
+    va_end(args);
+}
+
+void AppLog::info(const char* fmt, ...) {
+    if(logLevel > AppLogLevel::Info) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    addLog(args, fmt);
+    va_end(args);
+}
+
+void AppLog::error(const char* fmt, ...) {
+    if(logLevel > AppLogLevel::Error) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    addLog(args, fmt);
+    va_end(args);
+}
+
 
 void AppLog::draw(const char* title, bool* p_open) {
     if (!ImGui::Begin(title, p_open)) {

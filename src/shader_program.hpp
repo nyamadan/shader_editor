@@ -2,40 +2,77 @@
 
 #include "common.hpp"
 #include <map>
+#include <string>
+#include <memory>
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
+
+#include "../glslang/glslang/Include/ShHandle.h"
+
+namespace shader_editor {
+
+class CompileError {
+   private:
+    std::string original;
+    std::string type;
+    std::string fileName;
+    int32_t lineNumber;
+    std::string message;
+    CompileError() {}
+
+   public:
+    CompileError(std::string _original, std::string _type,
+                 std::string _fileName, int32_t _lineNumber,
+                 std::string _message)
+        : original(_original),
+          type(_type),
+          fileName(_fileName),
+          lineNumber(_lineNumber),
+          message(_message) {}
+    const std::string &getOriginal() const { return original; }
+    const std::string &getType() const { return type; }
+    int32_t getLineNumber() const { return lineNumber; }
+    const std::string &getMessage() const { return message; }
+    const std::string &getFileName() const { return fileName; }
+};
 
 class Shader {
    private:
     GLuint shader = 0;
     GLuint type = 0;
-    std::string path = "(empty)";
+    std::string path = "";
     std::string source = "";
-    std::string preSource = "";
-    std::map<int32_t, std::string> errors;
+    std::string sourceTemplate = "";
+    std::vector<std::shared_ptr<Shader>> dependencies;
+    std::vector<CompileError> errors;
     bool ok = false;
     int64_t mTime = 0;
 
-    void parseErrors(const std::string &error);
+    void parseGlslangErrors(const std::string &error);
+    bool scanVersion(const std::string &source, int &version, EProfile &profile,
+                     bool &notFirstToken);
+    bool parseSharderError(const std::string &line);
+    bool parseProgramError(const std::string &line);
 
    public:
     Shader() {}
     ~Shader() { reset(); }
     const std::string &getSource() const { return source; }
-    const std::map<int32_t, std::string> &getErrors() const { return errors; }
+    const std::vector<CompileError> &getErrors() const { return errors; }
     const std::string &getPath() const { return path; }
-    const std::string &getPreSource() const { return preSource; }
+    const std::string &getSourceTemplate() const { return sourceTemplate; }
     bool isOK() const { return ok; }
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
-    void setPreSource(const std::string &preSource);
+    void setSourceTemplate(const std::string &sourceTemplate);
     void reset();
     bool checkExpired() const;
     bool checkExpiredWithReset();
 
     void setCompileInfo(const std::string &path, GLuint type,
                         const std::string &source, int64_t mTime);
+    bool preCompile(std::string &combinedSource);
     bool compile();
     bool compile(const std::string &path, GLuint type,
                  const std::string &source, int64_t mTime);
@@ -118,7 +155,7 @@ class ShaderProgram {
     void applyAttribute(const std::string &name);
     void applyAttributes();
 
-    const bool containsUniform(const std::string &name) const;
+    bool containsUniform(const std::string &name) const;
     const ShaderUniform &getUniform(const std::string &name) const;
     void setUniformValue(const std::string &name,
                          const ShaderUniformValue &value);
@@ -145,11 +182,11 @@ class ShaderProgram {
     const std::string &getError() const { return error; }
 
     bool checkExpiredWithReset();
-    void setVertexShaderPreSource(const std::string preSource) {
-        this->vertexShader.setPreSource(preSource);
+    void setVertexShaderSourceTemplate(const std::string sourceTemplate) {
+        this->vertexShader.setSourceTemplate(sourceTemplate);
     }
-    void setFragmentShaderPreSource(const std::string preSource) {
-        this->fragmentShader.setPreSource(preSource);
+    void setFragmentShaderSourceTemplate(const std::string sourceTemplate) {
+        this->fragmentShader.setSourceTemplate(sourceTemplate);
     }
 
     void setCompileInfo(const std::string &vsPath, const std::string &fsPath,
@@ -161,3 +198,4 @@ class ShaderProgram {
                    const std::string &vsSource, const std::string &fsSource,
                    int64_t vsMTime, int64_t fsMTime);
 };
+}  // namespace shader_editor

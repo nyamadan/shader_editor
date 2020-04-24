@@ -74,12 +74,30 @@ std::shared_ptr<ShaderProgram> ShaderFiles::getShaderFile(int32_t index) {
 }
 
 int32_t ShaderFiles::pushNewProgram(std::shared_ptr<ShaderProgram> newProgram) {
+    auto newShaderPath = fs::path(newProgram->getFragmentShader().getPath());
+
+    for (auto i = 0; i < numShaderFileNames; i++) {
+        if(fs::path(shaderFileNames[i]).compare(newShaderPath) == 0) {
+            shaderFiles[i] = newProgram;
+            return i;
+        }
+    }
+
     shaderFiles.push_back(newProgram);
     genShaderFileNames();
     return numShaderFileNames - 1;
 }
 
 int32_t ShaderFiles::pushNewImage(std::shared_ptr<Image> newImage) {
+    auto newImagePath = fs::path(newImage->getPath());
+
+    for (auto i = 0; i < numImageFileNames; i++) {
+        if(fs::path(imageFileNames[i]).compare(newImagePath) == 0) {
+            imageFiles[i] = newImage;
+            return i;
+        }
+    }
+
     imageFiles.push_back(newImage);
     genImageFileNames();
     return numImageFileNames - 1;
@@ -90,28 +108,29 @@ void ShaderFiles::replaceNewProgram(int32_t uiShaderFileIndex,
     shaderFiles[uiShaderFileIndex] = newProgram;
 }
 
-void ShaderFiles::loadFiles(const std::string& path) {
-    AppLog::getInstance().addLog("Assets:\n");
+void ShaderFiles::loadFiles(const std::string& dirPath) {
+    AppLog::getInstance().debug("Assets:\n");
 
-    std::vector<std::string> files = openDir(path);
+    std::vector<std::string> files = openDir(dirPath);
     for (auto iter = files.begin(); iter != files.end(); iter++) {
         const std::string& file = *iter;
         std::string ext = fs::path(file).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
-
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
+            AppLog::getInstance().debug("Image: %s(%s)\n", iter->c_str(), ext.c_str());
             std::shared_ptr<Image> image = std::make_shared<Image>();
-            image->setPath(path, *iter, ext);
+            image->setPath(dirPath, *iter, ext);
             pushNewImage(image);
         }
 
         if (ext == ".glsl" || ext == ".frag") {
+            AppLog::getInstance().debug("Shader: %s(%s)\n", iter->c_str(), ext.c_str());
+
             std::shared_ptr<ShaderProgram> newProgram =
                 std::make_shared<ShaderProgram>();
 
-            std::string fragmentShaderPath = fs::path(path).append(file).string();
+            std::string fragmentShaderPath = fs::path(dirPath).append(file).string();
 
             const int64_t fsTime = getMTime(fragmentShaderPath);
             std::string fsSource;

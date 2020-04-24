@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/shader_editor.exe",
-            "args": [],
+            "args": ["-ldebug", "./assets"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

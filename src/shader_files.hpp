@@ -45,6 +45,6 @@ class ShaderFiles {
     void replaceNewProgram(int32_t uiShaderFileIndex,
                            std::shared_ptr<ShaderProgram> newProgram);
 
-    void ShaderFiles::loadFiles(const std::string& assetPath);
+    void loadFiles(const std::string& assetPath);
 };
 }  // namespace shader_editor
