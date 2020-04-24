@@ -28,3 +28,6 @@
 [submodule "minimp4"]
 	path = minimp4
 	url = https://github.com/lieff/minimp4.git
+[submodule "args"]
+	path = args
+	url = https://github.com/Taywee/args.git

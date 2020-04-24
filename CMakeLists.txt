@@ -35,6 +35,9 @@ set(IMGUI_SOURCES
     ${PROJECT_SOURCE_DIR}/ImGuiColorTextEdit/TextEditor.cpp
 )
 
+#args
+include_directories(${PROJECT_SOURCE_DIR}/args)
+
 #minimp4
 include_directories(${PROJECT_SOURCE_DIR}/minimp4)
 

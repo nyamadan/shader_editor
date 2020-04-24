@@ -211,7 +211,7 @@ void App::update(void*) {
 
     getUsedTextures(uNames, usedTextures);
 
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape))) {
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) && !recording->getIsRecording()) {
         uiDebugWindow = !uiDebugWindow;
     }
 
@@ -603,7 +603,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-int32_t App::start() {
+int32_t App::start(bool alwaysOnTop) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
     h264enabled = h264encoder::LoadEncoderLibrary();
 #endif
@@ -626,6 +626,10 @@ int32_t App::start() {
 #ifndef NDEBUG
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
 #endif
+
+    if(alwaysOnTop) {
+        glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
+    }
 
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
