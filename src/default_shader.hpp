@@ -42,7 +42,7 @@ const char* const DefaultVertexShaderSource =
     "    surfacePosition =\n"
     "        0.5 * aPosition.xy * vec2((resolution.x / resolution.y), 1.0);\n"
     "    gl_Position = vec4(aPosition, 1.0);\n"
-    "}";
+    "}\n";
 
 const char* const DefaultCopyShaderSource =
     "#ifdef GL_ES\n"
@@ -56,7 +56,7 @@ const char* const DefaultCopyShaderSource =
     "    vec2 uv = gl_FragCoord.xy / resolution;\n"
     "    vec3 color = texture2D(backbuffer, uv).rgb;\n"
     "    gl_FragColor = vec4(color, 1.0);\n"
-    "}";
+    "}\n";
 
 const char* const DefaultPreShaderToySource =
     "#version 300 es\n"
@@ -86,6 +86,6 @@ const char* const DefaultPreShaderToySource =
     "    mainImage(color, gl_FragCoord.xy);\n"
     "    color.a = 1.0;\n"
     "    outColor = color;\n"
-    "}";
+    "}\n";
 
 }  // namespace shader_editor
