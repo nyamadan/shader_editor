@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <memory>
+#include <filesystem>
 
 #include <imgui.h>
 #include <examples/imgui_impl_glfw.h>
@@ -26,12 +27,9 @@
 #include "shader_files.hpp"
 #include "default_shader.hpp"
 
+namespace fs = std::filesystem;
+
 namespace {
-const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
-                             -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
-
-const GLushort indices[] = {0, 2, 1, 1, 2, 3};
-
 void glfwErrorCallback(int error, const char* description) {
     AppLog::getInstance().addLog("error %d: %s\n", error, description);
 }
@@ -113,13 +111,15 @@ std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
                 editor.SetText(text);
                 editor.SetCursorPosition(TextEditor::Coordinates());
             } else {
-                if (uiShaderPlatformIndex == 1) {
+                if (uiShaderPlatformIndex == SHADER_TOY) {
                     newProgram->setFragmentShaderPreSource(
                         DefaultPreShaderToySource);
                 } else {
                     newProgram->setFragmentShaderPreSource(std::string());
                 }
+
                 recompileShaderFromFile(program, newProgram);
+
                 programErrors = newProgram->getFragmentShader().getErrors();
                 if (programErrors.begin() != programErrors.end()) {
                     cursorLine = programErrors.begin()->first - 1;
@@ -350,7 +350,6 @@ void App::update(void*) {
 
         for (auto iter = usedTextures.begin(); iter != usedTextures.end();
              iter++) {
-            const std::string& name = iter->first;
             std::shared_ptr<Image> image = iter->second;
 
             if (!image->isLoaded()) {
@@ -603,7 +602,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-int32_t App::start(bool alwaysOnTop) {
+int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
     h264enabled = h264encoder::LoadEncoderLibrary();
 #endif
@@ -675,6 +674,11 @@ int32_t App::start(bool alwaysOnTop) {
                          -1);
     assert(copyProgram->isOK());
 
+    const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
+                                 -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
+
+    const GLushort indices[] = {0, 2, 1, 1, 2, 3};
+
     glGenBuffers(1, &vIndex);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vIndex);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * 6, indices,
@@ -700,7 +704,41 @@ int32_t App::start(bool alwaysOnTop) {
 
     // Load files.
     sf.pushNewProgram(program);
-    sf.loadFiles("./assets");
+
+    auto path = fs::path(assetPath);
+    if(path.extension().empty()) {
+        sf.loadFiles(assetPath);
+    } else {
+        sf.loadFiles(path.parent_path().string());
+
+        const auto len = sf.getNumShaderFileNames();
+        const auto fileNames = sf.getShaderFileNames();
+
+        for(auto i = 0; i < len; i++) {
+            if (path.compare(fileNames[i])) {
+                continue;
+            }
+
+            uiShaderFileIndex = i;
+
+            std::shared_ptr<ShaderProgram> newProgram =
+                std::make_shared<ShaderProgram>();
+
+            if (uiShaderPlatformIndex == SHADER_TOY) {
+                newProgram->setFragmentShaderPreSource(
+                    DefaultPreShaderToySource);
+            }
+
+            compileShaderFromFile(newProgram,
+                                  program->getVertexShader().getPath(), path.string());
+            editor.SetText(newProgram->getFragmentShader().getSource());
+            editor.SetCursorPosition(TextEditor::Coordinates());
+            programErrors = newProgram->getFragmentShader().getErrors();
+            SetProgramErrors(programErrors);
+            program.swap(newProgram);
+            break;
+        }
+    }
 
     timeStart = static_cast<float>(ImGui::GetTime());
 

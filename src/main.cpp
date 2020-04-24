@@ -11,9 +11,11 @@ void update(void*) { app.update(nullptr); }
 
 int main(const int argc, const char** const argv) {
     args::ArgumentParser parser("Shader Editor for GLSL");
-    args::HelpFlag help(parser, "help", "Display this help menu",
+    args::HelpFlag help(parser, "help", "display this help menu",
                         {'h', "help"});
-    args::Flag top(parser, "top", "always on top", {'t'});
+    args::Flag top(parser, "top", "always on top", {'t'}, false);
+    args::Positional<std::string> assetPath(parser, "asset path",
+                                            "path to asset", "./assets");
 
     try {
         parser.ParseCLI(argc, argv);
@@ -29,7 +31,7 @@ int main(const int argc, const char** const argv) {
         return 1;
     }
 
-    app.start(top.Get());
+    app.start(assetPath.Get(), top.Get());
 
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);

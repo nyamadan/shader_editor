@@ -99,7 +99,7 @@ class App {
    public:
     GLFWwindow* getMainWindow();
 
-    int32_t start(bool alwaysOnTop);
+    int32_t start(const std::string& asetPath, bool alwaysOnTop);
     void update(void*);
     void getUsedTextures(
         const UniformNames& uNames,
