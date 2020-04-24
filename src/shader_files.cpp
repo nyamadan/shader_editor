@@ -1,9 +1,8 @@
 #include "shader_files.hpp"
+#include "default_shader.hpp"
 #include "app_log.hpp"
 
-const char* const DefaultAssetPath = "./default";
-const char* const DefaultVertexShaderName = "vert.glsl";
-
+namespace shader_editor {
 void ShaderFiles::deleteShaderFileNamse() {
     if (shaderFileNames != nullptr) {
         for (int64_t i = 0; i < numShaderFileNames; i++) {
@@ -87,8 +86,7 @@ void ShaderFiles::replaceNewProgram(int32_t uiShaderFileIndex,
     shaderFiles[uiShaderFileIndex] = newProgram;
 }
 
-void ShaderFiles::loadFiles(const std::string& path,
-                            const std::string& vertexShaderPath) {
+void ShaderFiles::loadFiles(const std::string& path) {
     AppLog::getInstance().addLog("Assets:\n");
 
     std::vector<std::string> files = openDir(path);
@@ -110,15 +108,12 @@ void ShaderFiles::loadFiles(const std::string& path,
             std::string fragmentShaderPath = path;
             appendPath(fragmentShaderPath, file);
 
-            const int64_t vsTime = getMTime(vertexShaderPath);
             const int64_t fsTime = getMTime(fragmentShaderPath);
-            std::string vsSource;
             std::string fsSource;
-            readText(vertexShaderPath, vsSource);
             readText(fragmentShaderPath, fsSource);
-            newProgram->setCompileInfo(vertexShaderPath, fragmentShaderPath,
-                                       vsSource, fsSource, vsTime, fsTime);
+            newProgram->setCompileInfo("<default-vertex-shader>", fragmentShaderPath, DefaultVertexShaderSource, fsSource, 0, fsTime);
             pushNewProgram(newProgram);
         }
     }
+}
 }

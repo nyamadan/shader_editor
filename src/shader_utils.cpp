@@ -3,13 +3,14 @@
 #include "app_log.hpp"
 #include "shader_program.hpp"
 #include "file_utils.hpp"
+#include "default_shader.hpp"
 
 #include <iostream>
 
 #ifdef __EMSCRIPTEN__
-const char *const GlslVersion = "#version 300 es\n";
+const char* const GlslVersion = "#version 300 es\n";
 #else
-const char *const GlslVersion = "#version 330 core\n";
+const char* const GlslVersion = "#version 330 core\n";
 #endif
 
 GLint checkLinked(GLuint program) {
@@ -18,7 +19,7 @@ GLint checkLinked(GLuint program) {
     return success;
 }
 
-GLint checkLinked(GLuint program, std::string &error) {
+GLint checkLinked(GLuint program, std::string& error) {
     GLint success = 0;
     glGetProgramiv(program, GL_LINK_STATUS, &success);
 
@@ -26,7 +27,7 @@ GLint checkLinked(GLuint program, std::string &error) {
         GLint max_len = 0;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &max_len);
 
-        char *err_log = new char[max_len];
+        char* err_log = new char[max_len];
         glGetProgramInfoLog(program, max_len, &max_len, err_log);
 
         error = err_log;
@@ -43,7 +44,7 @@ GLint checkCompiled(GLuint shader) {
     return success;
 };
 
-GLint checkCompiled(GLuint shader, std::string &error) {
+GLint checkCompiled(GLuint shader, std::string& error) {
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 
@@ -51,7 +52,7 @@ GLint checkCompiled(GLuint shader, std::string &error) {
         GLint max_len = 0;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
 
-        char *err_log = new char[max_len];
+        char* err_log = new char[max_len];
 
         glGetShaderInfoLog(shader, max_len, &max_len, err_log);
 
@@ -63,39 +64,72 @@ GLint checkCompiled(GLuint shader, std::string &error) {
     return success;
 };
 
-void compileShaderFromFile(
-    const std::shared_ptr<ShaderProgram> program, const std::string& vsPath,
-    const std::string& fsPath) {
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
+void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
+                           const std::string& vsPath,
+                           const std::string& fsPath) {
+    int64_t vsTime = -1;
+    int64_t fsTime = -1;
     std::string vsSource;
     std::string fsSource;
-    readText(vsPath, vsSource);
-    readText(fsPath, fsSource);
+
+    if (vsPath == "<default-vertex-shader>") {
+        vsSource = shader_editor::DefaultVertexShaderSource;
+    } else {
+        vsTime = getMTime(vsPath);
+        readText(vsPath, vsSource);
+    }
+
+    if (fsPath == "<default-fragment-shader>") {
+        fsSource = shader_editor::DefaultFragmentShaderSource;
+    } else {
+        fsTime = getMTime(fsPath);
+        readText(fsPath, fsSource);
+    }
+
     program->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
-void recompileFragmentShader(
-    const std::shared_ptr<ShaderProgram> program,
-    std::shared_ptr<ShaderProgram> newProgram, const std::string& fsSource) {
+void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
+                             std::shared_ptr<ShaderProgram> newProgram,
+                             const std::string& fsSource) {
     const std::string& vsPath = program->getVertexShader().getPath();
     const std::string& fsPath = program->getFragmentShader().getPath();
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
+    int64_t vsTime = -1;
+    int64_t fsTime = -1;
     const std::string& vsSource = program->getVertexShader().getSource();
+
+    if (vsPath != "<default-vertex-shader>") {
+        vsTime = getMTime(vsPath);
+    }
+
+    if (fsPath != "<default-fragment-shader>") {
+        fsTime = getMTime(fsPath);
+    }
     newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
-void recompileShaderFromFile(
-    const std::shared_ptr<ShaderProgram> program,
-    std::shared_ptr<ShaderProgram> newProgram) {
+void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
+                             std::shared_ptr<ShaderProgram> newProgram) {
     const std::string& vsPath = program->getVertexShader().getPath();
     const std::string& fsPath = program->getFragmentShader().getPath();
-    const int64_t vsTime = getMTime(vsPath);
-    const int64_t fsTime = getMTime(fsPath);
+    int64_t vsTime = -1;
+    int64_t fsTime = -1;
     std::string vsSource;
     std::string fsSource;
-    readText(vsPath, vsSource);
-    readText(fsPath, fsSource);
+
+    if (vsPath == "<default-vertex-shader>") {
+        vsSource = shader_editor::DefaultVertexShaderSource;
+    } else {
+        vsTime = getMTime(vsPath);
+        readText(vsPath, vsSource);
+    }
+
+    if (fsPath == "<default-fragment-shader>") {
+        fsSource = shader_editor::DefaultFragmentShaderSource;
+    } else {
+        fsTime = getMTime(fsPath);
+        readText(fsPath, fsSource);
+    }
+
     newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }

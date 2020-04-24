@@ -3,6 +3,7 @@
 #include "shader_utils.hpp"
 #include "file_utils.hpp"
 #include "shader_program.hpp"
+#include "default_shader.hpp"
 
 #include <regex>
 #include <sstream>
@@ -43,7 +44,7 @@ void Shader::reset() {
     errors.clear();
     type = 0;
     shader = 0;
-    path = "(empty)";
+    path = "";
     source = "";
     preSource = "";
     ok = false;
@@ -175,7 +176,7 @@ void ShaderProgram::applyAttributes() {
             continue;
         }
 
-		glEnableVertexAttribArray(attr.location);
+        glEnableVertexAttribArray(attr.location);
         glVertexAttribPointer(attr.location, attr.size, attr.type,
                               attr.normalized, attr.stride, attr.pointer);
     }
@@ -191,7 +192,7 @@ void ShaderProgram::uniform(const std::string &name, UniformType type) {
 }
 
 void ShaderProgram::uniform(const std::string &name, GLint location,
-                             UniformType type) {
+                            UniformType type) {
     ShaderUniform &u = uniforms[name];
     u.name = name;
     u.location = location;
@@ -490,7 +491,7 @@ void ShaderProgram::loadAttributes() {
 
     for (int i = 0; i < count; i++) {
         const GLsizei bufSize = 128;
-        GLchar name[bufSize + 1] = { 0 };
+        GLchar name[bufSize + 1] = {0};
         GLsizei length;
         GLint size;
         GLenum type;

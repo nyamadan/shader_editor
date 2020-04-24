@@ -58,7 +58,7 @@ class App {
     float uiVideoMbps = 1.0f;
     float uiVideoTime = 5.0f;
 
-    std::map<std::string, int32_t> uiImageFileNames;
+    std::map<std::string, int32_t> imageUniformNameToIndex;
     std::map<int32_t, std::string> programErrors;
 
     int32_t windowWidth = 1024;
@@ -69,8 +69,6 @@ class App {
     GLuint vIndex = 0;
     GLuint vPosition = 0;
     GLuint vertexArraysObject = 0;
-
-    std::string shaderToyPreSource;
 
     std::shared_ptr<ShaderProgram> program;
     std::shared_ptr<ShaderProgram> copyProgram;
@@ -101,8 +99,14 @@ class App {
    public:
     GLFWwindow* getMainWindow();
 
-    void update(void*);
     int32_t start();
+    void update(void*);
+    void getUsedTextures(
+        const UniformNames& uNames,
+        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
+    void cleanup();
+
+    std::shared_ptr<ShaderProgram> refreshShaderProgram(float now, int32_t &cursorLine);
 
     void onUiCaptureWindow();
     void onUiStatsWindow();
@@ -114,11 +118,5 @@ class App {
         std::map<std::string, std::shared_ptr<Image>>& usedTextures);
 
     void onUiShaderFileWindow(int32_t& cursorLine);
-
-    void getUsedTextures(
-        const UniformNames& uNames,
-        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
-
-    void cleanup();
 };
 }  // namespace shader_editor

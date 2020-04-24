@@ -7,6 +7,8 @@
 #include <vector>
 #include <memory>
 
+namespace shader_editor {
+
 class ShaderFiles {
    private:
     std::vector<std::shared_ptr<Image>> imageFiles;
@@ -43,5 +45,6 @@ class ShaderFiles {
     void replaceNewProgram(int32_t uiShaderFileIndex,
                            std::shared_ptr<ShaderProgram> newProgram);
 
-    void ShaderFiles::loadFiles(const std::string& assetPath, const std::string& vertexShaderPath);
+    void ShaderFiles::loadFiles(const std::string& assetPath);
 };
+}  // namespace shader_editor

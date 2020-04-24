@@ -7,21 +7,19 @@
 #include <assert.h>
 
 namespace {
-static HMODULE _openh264 = nullptr;
-static int32_t (*_WelsCreateSVCEncoder)(void**) = nullptr;
-static void (*_WelsDestroySVCEncoder)(void*) = nullptr;
-
 int WriteCallback(int64_t offset, const void* buffer, size_t size,
                   void* token) {
     FILE* f = (FILE*)token;
     fseek(f, static_cast<long>(offset), SEEK_SET);
     return fwrite(buffer, 1, size, f) != size;
 }
-
 }  // namespace
 
 namespace h264encoder {
 #if defined(_MSC_VER) || defined(__MINGW32__)
+static HMODULE _openh264 = nullptr;
+static int32_t (*_WelsCreateSVCEncoder)(void**) = nullptr;
+static void (*_WelsDestroySVCEncoder)(void*) = nullptr;
 
 bool LoadEncoderLibrary() {
     const auto LibraryName = "openh264-2.0.0-win64.dll";
@@ -171,5 +169,25 @@ void DestroyOpenH264Encoder(void* pOpenH264Encoder) {
 }
 
 #else
+bool LoadEncoderLibrary() { return false; }
+
+void UnloadEncoderLibrary() {}
+
+void Finalize(void* pOpenH264Encoder, MP4E_mux_t* pMP4Muxer,
+              mp4_h26x_writer_t* pMP4H264Writer) {}
+
+void EncodeFrame(void* pEncoder, mp4_h26x_writer_t* pWriter, uint8_t* data,
+                 int32_t iPicWidth, int32_t iPicHeight, int64_t timestamp) {}
+
+bool CreateOpenH264Encoder(void** ppEncoder, MP4E_mux_t** ppMP4Muxer,
+                           mp4_h26x_writer_t** ppMP4H264Writer,
+                           int32_t iPicWidth, int32_t iPicHeight, FILE* fp) {
+    return false;
+}
+
+void DestroyOpenH264Encoder(void* pOpenH264Encoder) {
+    int32_t rv = ((int32_t(*)(void* pEncoder))(*(void***)pOpenH264Encoder)[3])(
+        pOpenH264Encoder);
+}
 #endif
 }  // namespace h264encoder

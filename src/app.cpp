@@ -24,14 +24,9 @@
 #include "recording.hpp"
 #include "buffers.hpp"
 #include "shader_files.hpp"
+#include "default_shader.hpp"
 
 namespace {
-const char* const DefaultAssetPath = "./default";
-const char* const DefaultVertexShaderName = "vert.glsl";
-const char* const DefaultFragmentShaderName = "frag.glsl";
-const char* const CopyFragmentShaderName = "copy.glsl";
-const char* const ShaderToyPreSourceName = "pre_shadertoy.glsl";
-
 const GLfloat positions[] = {-1.0f, 1.0f,  0.0f, 1.0f, 1.0f,  0.0f,
                              -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f};
 
@@ -100,6 +95,48 @@ UniformNames App::getUniformNames(ShaderPlatform platform) {
     return uNames;
 }
 
+std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
+                                                         int32_t& cursorLine) {
+    std::shared_ptr<ShaderProgram> newProgram =
+        std::make_shared<ShaderProgram>();
+
+    newProgram->setCompileInfo(
+        "<default-vertex-shader>", "<default-fragment-shader>",
+        DefaultVertexShaderSource, DefaultFragmentShaderSource, 0, 0);
+
+    if (now - lastCheckUpdate > CheckInterval) {
+        if (program->checkExpiredWithReset()) {
+            if (uiDebugWindow && uiShowTextEditor) {
+                std::string text;
+                readText(program->getFragmentShader().getPath(), text);
+                cursorLine = editor.GetCursorPosition().mLine;
+                editor.SetText(text);
+                editor.SetCursorPosition(TextEditor::Coordinates());
+            } else {
+                if (uiShaderPlatformIndex == 1) {
+                    newProgram->setFragmentShaderPreSource(
+                        DefaultPreShaderToySource);
+                } else {
+                    newProgram->setFragmentShaderPreSource(std::string());
+                }
+                recompileShaderFromFile(program, newProgram);
+                programErrors = newProgram->getFragmentShader().getErrors();
+                if (programErrors.begin() != programErrors.end()) {
+                    cursorLine = programErrors.begin()->first - 1;
+                }
+
+                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+
+                SetProgramErrors(programErrors);
+            }
+        }
+
+        lastCheckUpdate = now;
+    }
+
+    return newProgram;
+}
+
 void App::update(void*) {
     std::map<std::string, std::shared_ptr<Image>> usedTextures;
 
@@ -120,41 +157,11 @@ void App::update(void*) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    std::shared_ptr<ShaderProgram> newProgram =
-        std::make_shared<ShaderProgram>();
-
-    if (now - lastCheckUpdate > CheckInterval) {
-        if (program->checkExpiredWithReset()) {
-            if (uiDebugWindow && uiShowTextEditor) {
-                std::string text;
-                readText(program->getFragmentShader().getPath(), text);
-                cursorLine = editor.GetCursorPosition().mLine;
-                editor.SetText(text);
-                editor.SetCursorPosition(TextEditor::Coordinates());
-            } else {
-                if (uiShaderPlatformIndex == 1) {
-                    newProgram->setFragmentShaderPreSource(shaderToyPreSource);
-                } else {
-                    newProgram->setFragmentShaderPreSource(std::string());
-                }
-                recompileShaderFromFile(program, newProgram);
-                programErrors = newProgram->getFragmentShader().getErrors();
-                if (programErrors.begin() != programErrors.end()) {
-                    cursorLine = programErrors.begin()->first - 1;
-                }
-
-                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
-
-                SetProgramErrors(programErrors);
-            }
-        }
-
-        lastCheckUpdate = now;
-    }
+    auto newProgram = refreshShaderProgram(now, cursorLine);
 
     if (uiShowTextEditor && editor.IsTextChanged()) {
         if (uiShaderPlatformIndex == 1) {
-            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
         } else {
             newProgram->setFragmentShaderPreSource(std::string());
         }
@@ -500,9 +507,9 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         std::shared_ptr<ShaderProgram> newProgram =
                             std::make_shared<ShaderProgram>();
 
-                        if (uiPlatform == 1) {
+                        if (uiPlatform == SHADER_TOY) {
                             newProgram->setFragmentShaderPreSource(
-                                shaderToyPreSource);
+                                DefaultPreShaderToySource);
                         }
 
                         writeText(path, buffer, static_cast<int32_t>(size));
@@ -651,26 +658,17 @@ int32_t App::start() {
 
     glfwMakeContextCurrent(mainWindow);
 
-    std::string vertexShaderPath = DefaultAssetPath;
-    std::string fragmentShaderPath = DefaultAssetPath;
-    std::string shaderToyPreSourcePath = DefaultAssetPath;
-    std::string copyFS = DefaultAssetPath;
-
-    appendPath(vertexShaderPath, DefaultVertexShaderName);
-    appendPath(fragmentShaderPath, DefaultFragmentShaderName);
-    appendPath(copyFS, CopyFragmentShaderName);
-    appendPath(shaderToyPreSourcePath, ShaderToyPreSourceName);
-
-    // load pre source
-    readText(shaderToyPreSourcePath, shaderToyPreSource);
-
     // Compile shaders.
     program.reset(new ShaderProgram());
-    compileShaderFromFile(program, vertexShaderPath, fragmentShaderPath);
+    program->compile("<default-vertex-shader>", "<default-fragment-shader>",
+                     DefaultVertexShaderSource, DefaultFragmentShaderSource, -1,
+                     -1);
     assert(program->isOK());
 
     copyProgram.reset(new ShaderProgram());
-    compileShaderFromFile(copyProgram, vertexShaderPath, copyFS);
+    copyProgram->compile("<default-vertex-shader>", "<default-copy-shader>",
+                         DefaultVertexShaderSource, DefaultCopyShaderSource, -1,
+                         -1);
     assert(copyProgram->isOK());
 
     glGenBuffers(1, &vIndex);
@@ -698,7 +696,7 @@ int32_t App::start() {
 
     // Load files.
     sf.pushNewProgram(program);
-    sf.loadFiles("./assets", vertexShaderPath);
+    sf.loadFiles("./assets");
 
     timeStart = static_cast<float>(ImGui::GetTime());
 
@@ -729,7 +727,7 @@ void App::getUsedTextures(
 
             if (u.type == UniformType::Sampler2D &&
                 u.name != uNames.backbuffer) {
-                int32_t& uiImage = uiImageFileNames[u.name];
+                int32_t& uiImage = imageUniformNameToIndex[u.name];
 
                 if (uiImage < 0 || uiImage >= sf.getNumImageFileNames()) {
                     uiImage = 0;
@@ -917,7 +915,6 @@ void App::onUiUniformWindow(
     std::map<const std::string, ShaderUniform>& uniforms =
         program->getUniforms();
     for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
-        const std::string& name = it->first;
         ShaderUniform& u = it->second;
         if (u.location < 0) {
             continue;
@@ -939,7 +936,7 @@ void App::onUiUniformWindow(
                 break;
             case UniformType::Sampler2D:
                 if (sf.getNumImageFileNames() > 0) {
-                    int32_t& uiImage = uiImageFileNames[u.name];
+                    int32_t& uiImage = imageUniformNameToIndex[u.name];
 
                     if (ImGui::Combo(u.name.c_str(), &uiImage,
                                      sf.getImageFileNames(),
@@ -974,8 +971,8 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
         std::shared_ptr<ShaderProgram> newProgram =
             std::make_shared<ShaderProgram>();
 
-        if (uiShaderPlatformIndex == 1) {
-            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+        if (uiShaderPlatformIndex == SHADER_TOY) {
+            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
         } else {
             newProgram->setFragmentShaderPreSource(std::string());
         }
@@ -996,8 +993,8 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
                      sf.getNumShaderFileNames())) {
         auto newProgram = sf.getShaderFile(uiShaderFileIndex);
 
-        if (uiShaderPlatformIndex == 1) {
-            newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+        if (uiShaderPlatformIndex == SHADER_TOY) {
+            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
         } else {
             newProgram->setFragmentShaderPreSource(std::string());
         }
@@ -1038,8 +1035,9 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
             std::shared_ptr<ShaderProgram> newProgram =
                 std::make_shared<ShaderProgram>();
 
-            if (uiShaderPlatformIndex == 1) {
-                newProgram->setFragmentShaderPreSource(shaderToyPreSource);
+            if (uiShaderPlatformIndex == SHADER_TOY) {
+                newProgram->setFragmentShaderPreSource(
+                    DefaultPreShaderToySource);
             }
 
             compileShaderFromFile(newProgram,
