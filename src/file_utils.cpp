@@ -66,19 +66,6 @@ std::vector<std::string> openDir(std::string path) {
     return std::move(files);
 }
 
-std::string getExtention(const std::string &path) {
-    int64_t iExt = path.find_last_of(".");
-
-    if (iExt <= 0) {
-        return std::move(std::string());
-    }
-
-    std::string ext = path.substr(iExt, path.size() - iExt);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-    return std::move(ext);
-}
-
 bool readText(const std::string &path, std::string &memblock) {
     std::ifstream fs(path, std::ifstream::in);
     memblock.assign((std::istreambuf_iterator<char>(fs)),

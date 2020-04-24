@@ -25,7 +25,8 @@ Image::~Image() {
 const std::string &Image::getPath() const { return path; }
 
 void Image::setPath(const std::string &base, const std::string &name) {
-    std::string ext = getExtention(base);
+    std::string ext = fs::path(base).extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
     this->setPath(base, name, ext);
 }
 

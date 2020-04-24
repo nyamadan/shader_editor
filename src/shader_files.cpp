@@ -96,7 +96,9 @@ void ShaderFiles::loadFiles(const std::string& path) {
     std::vector<std::string> files = openDir(path);
     for (auto iter = files.begin(); iter != files.end(); iter++) {
         const std::string& file = *iter;
-        std::string ext = getExtention(*iter);
+        std::string ext = fs::path(file).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
         AppLog::getInstance().addLog("%s(%s)\n", iter->c_str(), ext.c_str());
 
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
