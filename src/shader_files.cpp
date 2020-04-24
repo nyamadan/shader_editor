@@ -2,6 +2,10 @@
 #include "default_shader.hpp"
 #include "app_log.hpp"
 
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 namespace shader_editor {
 void ShaderFiles::deleteShaderFileNamse() {
     if (shaderFileNames != nullptr) {
@@ -105,8 +109,7 @@ void ShaderFiles::loadFiles(const std::string& path) {
             std::shared_ptr<ShaderProgram> newProgram =
                 std::make_shared<ShaderProgram>();
 
-            std::string fragmentShaderPath = path;
-            appendPath(fragmentShaderPath, file);
+            std::string fragmentShaderPath = fs::path(path).append(file).string();
 
             const int64_t fsTime = getMTime(fragmentShaderPath);
             std::string fsSource;

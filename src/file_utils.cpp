@@ -79,19 +79,6 @@ std::string getExtention(const std::string &path) {
     return std::move(ext);
 }
 
-void appendPath(std::string &base, const std::string &path) {
-#if defined(_MSC_VER) || defined(__MINGW32__)
-    if (base.back() != '\\' && base.back() != '/') {
-        base.append("\\");
-    }
-#else
-    if (base.back() != '/') {
-        base.append("/");
-    }
-#endif
-    base.append(path);
-}
-
 bool readText(const std::string &path, std::string &memblock) {
     std::ifstream fs(path, std::ifstream::in);
     memblock.assign((std::istreambuf_iterator<char>(fs)),

@@ -1,9 +1,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image.h>
+#include <filesystem>
 
 #include "image.hpp"
 #include "app_log.hpp"
+
+namespace fs = std::filesystem;
 
 Image::Image() {}
 
@@ -32,8 +35,7 @@ void Image::setPath(const std::string &base, const std::string &name,
     this->name = name;
     this->ext = ext;
 
-    this->path = this->base;
-    appendPath(this->path, this->name);
+    this->path = fs::path(this->base).append(this->name).string();
 }
 
 bool Image::load() {
