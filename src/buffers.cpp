@@ -102,7 +102,7 @@ void Buffers::updateFrameBuffersSize(GLint width, GLint height) {
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, pixelBuffers[i]);
         glBufferData(GL_PIXEL_PACK_BUFFER, bufferWidth * bufferHeight * 4L, 0,
-                     GL_STREAM_READ);
+                     GL_STREAM_DRAW);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     }
 }

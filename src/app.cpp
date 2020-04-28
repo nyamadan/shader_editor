@@ -31,7 +31,7 @@ namespace fs = std::filesystem;
 
 namespace {
 void glfwErrorCallback(int error, const char* description) {
-    AppLog::getInstance().addLog("error %d: %s\n", error, description);
+    AppLog::getInstance().error("error %d: %s\n", error, description);
 }
 
 #ifndef __EMSCRIPTEN__
@@ -42,16 +42,16 @@ void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
         case GL_DEBUG_SEVERITY_NOTIFICATION:
             break;
         case GL_DEBUG_SEVERITY_LOW:
-            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_LOW(%X): %s\n", eid,
-                                         message);
+            AppLog::getInstance().error("GL_DEBUG_SEVERITY_LOW(%X): %s\n", eid,
+                                        message);
             break;
         case GL_DEBUG_SEVERITY_MEDIUM:
-            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_MEDIUM(%X): %s\n",
-                                         eid, message);
+            AppLog::getInstance().error("GL_DEBUG_SEVERITY_MEDIUM(%X): %s\n",
+                                        eid, message);
             break;
         case GL_DEBUG_SEVERITY_HIGH:
-            AppLog::getInstance().addLog("GL_DEBUG_SEVERITY_HIGH(%X): %s\n",
-                                         eid, message);
+            AppLog::getInstance().error("GL_DEBUG_SEVERITY_HIGH(%X): %s\n", eid,
+                                        message);
             break;
     }
 }
@@ -112,22 +112,22 @@ std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
                 editor.SetCursorPosition(TextEditor::Coordinates());
             } else {
                 if (uiShaderPlatformIndex == SHADER_TOY) {
-                    newProgram->setFragmentShaderPreSource(
-                        DefaultPreShaderToySource);
+                    newProgram->setFragmentShaderSourceTemplate(
+                        ShaderToyTemplate);
                 } else {
-                    newProgram->setFragmentShaderPreSource(std::string());
+                    newProgram->setFragmentShaderSourceTemplate(std::string());
                 }
 
                 recompileShaderFromFile(program, newProgram);
 
                 programErrors = newProgram->getFragmentShader().getErrors();
                 if (programErrors.begin() != programErrors.end()) {
-                    cursorLine = programErrors.begin()->first - 1;
+                    cursorLine = programErrors.begin()->getLineNumber() - 1;
                 }
 
-                sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+                shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-                SetProgramErrors(programErrors);
+                SetProgramErrors(programErrors, this->program);
             }
         }
 
@@ -160,26 +160,35 @@ void App::update(void*) {
     auto newProgram = refreshShaderProgram(now, cursorLine);
 
     if (uiShowTextEditor && editor.IsTextChanged()) {
-        if (uiShaderPlatformIndex == 1) {
-            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
+        needRecompile = true;
+        lastTextEdited = now;
+    }
+
+    if(needRecompile && now > lastTextEdited + recompileDelay){
+        needRecompile = false;
+
+        if (uiShaderPlatformIndex == SHADER_TOY) {
+            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
         } else {
-            newProgram->setFragmentShaderPreSource(std::string());
+            newProgram->setFragmentShaderSourceTemplate(std::string());
         }
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
         if (editor.IsReadOnly() &&
             programErrors.begin() != programErrors.end()) {
-            cursorLine = programErrors.begin()->first - 1;
+            cursorLine = programErrors.begin()->getLineNumber() - 1;
         }
 
-        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+        shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors);
+        SetProgramErrors(programErrors, this->program);
     }
 
     if (newProgram->isOK()) {
         swapProgram(newProgram);
+
+        needRecompile = false;
     }
 
     const bool* const mouseDown = ImGui::GetIO().MouseDown;
@@ -211,7 +220,8 @@ void App::update(void*) {
 
     getUsedTextures(uNames, usedTextures);
 
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) && !recording->getIsRecording()) {
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)) &&
+        !recording->getIsRecording()) {
         uiDebugWindow = !uiDebugWindow;
     }
 
@@ -223,8 +233,8 @@ void App::update(void*) {
         ImGui::Checkbox("Time", &uiTimeWindow);
         ImGui::Checkbox("Stats", &uiStatsWindow);
         ImGui::Checkbox("Uniforms", &uiUniformWindow);
-        ImGui::Checkbox("BackBuffer", &uiBackBufferWindow);
-        ImGui::Checkbox("Export Video", &uiCaptureWindow);
+        ImGui::Checkbox("Buffer Size", &uiBackBufferWindow);
+        ImGui::Checkbox("Save as Video", &uiCaptureWindow);
         ImGui::Checkbox("Errors", &uiErrorWindow);
         ImGui::Checkbox("Log", &uiAppLogWindow);
 
@@ -259,25 +269,7 @@ void App::update(void*) {
         }
 
         if (uiErrorWindow) {
-            ImGui::Begin("Errors", &uiErrorWindow);
-            ImGui::SetWindowSize(ImVec2(800, 80), ImGuiCond_FirstUseEver);
-
-            for (auto iter = programErrors.begin(); iter != programErrors.end();
-                 iter++) {
-                const auto& line = iter->first;
-                const auto& message = iter->second;
-                std::stringstream ss;
-                ss << std::setw(4) << std::setfill('0') << line << ": "
-                   << message;
-                bool selected = false;
-                if (ImGui::Selectable(ss.str().c_str(), selected)) {
-                    TextEditor::Coordinates cursor;
-                    cursor.mLine = line - 1;
-                    editor.SetCursorPosition(cursor);
-                }
-            }
-
-            ImGui::End();
+            onUiErrorWindow();
         }
 
         if (uiAppLogWindow) {
@@ -420,7 +412,7 @@ void App::update(void*) {
     glfwSwapBuffers(mainWindow);
 
     for (GLenum error = glGetError(); error; error = glGetError()) {
-        AppLog::getInstance().addLog("error code: 0x%0X\n", error);
+        AppLog::getInstance().debug("error code: 0x%0X\n", error);
     }
 
     glfwPollEvents();
@@ -464,8 +456,27 @@ void App::startRecord(const std::string& fileName,
                      uiVideoTypeIndex, kbps, encodeDeadline);
 }
 
-void App::SetProgramErrors(std::map<int32_t, std::string>& programErrors) {
-    editor.SetErrorMarkers(programErrors);
+void App::SetProgramErrors(const std::vector<CompileError>& programErrors,
+                           std::shared_ptr<ShaderProgram> program) {
+    std::map<int32_t, std::string> markers;
+    for (auto it = programErrors.cbegin(); it != programErrors.cend(); it++) {
+        const auto lineNumber = it->getLineNumber();
+        if (lineNumber < 0) {
+            continue;
+        }
+
+        if (fs::path(program->getFragmentShader().getPath())
+                .compare(it->getFileName()) != 0) {
+            continue;
+        }
+
+        if (markers.count(lineNumber) != 0) {
+            markers[lineNumber] += "\n" + it->getOriginal();
+        } else {
+            markers[lineNumber] += it->getOriginal();
+        }
+    }
+    editor.SetErrorMarkers(markers);
 }
 
 void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
@@ -484,7 +495,7 @@ void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
 }
 
 void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
-                         int32_t uiPlatform) {
+                         int32_t uiShaderPlatformIndex) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin("Text Editor", &showTextEditor, ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -506,9 +517,9 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         std::shared_ptr<ShaderProgram> newProgram =
                             std::make_shared<ShaderProgram>();
 
-                        if (uiPlatform == SHADER_TOY) {
-                            newProgram->setFragmentShaderPreSource(
-                                DefaultPreShaderToySource);
+                        if (uiShaderPlatformIndex == SHADER_TOY) {
+                            newProgram->setFragmentShaderSourceTemplate(
+                                ShaderToyTemplate);
                         }
 
                         writeText(path, buffer, static_cast<int32_t>(size));
@@ -525,7 +536,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         newProgram->compile(vsPath, fsPath, vsSource, fsSource,
                                             vsTime, fsTime);
 
-                        uiShader = sf.pushNewProgram(newProgram);
+                        uiShader = shaderFiles.pushNewProgram(newProgram);
 
                         program.swap(newProgram);
                     }
@@ -626,7 +637,7 @@ int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 1);
 #endif
 
-    if(alwaysOnTop) {
+    if (alwaysOnTop) {
         glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
     }
 
@@ -703,19 +714,19 @@ int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
     buffers.initialize(windowWidth / 2, windowHeight / 2);
 
     // Load files.
-    sf.pushNewProgram(program);
+    shaderFiles.pushNewProgram(program);
 
     auto path = fs::path(assetPath);
-    if(path.extension().empty()) {
-        sf.loadFiles(assetPath);
+    if (path.extension().empty()) {
+        shaderFiles.loadFiles(assetPath);
     } else {
-        sf.loadFiles(path.parent_path().string());
+        shaderFiles.loadFiles(path.parent_path().string());
 
-        const auto len = sf.getNumShaderFileNames();
-        const auto fileNames = sf.getShaderFileNames();
+        const auto len = shaderFiles.getNumShaderFileNames();
+        const auto fileNames = shaderFiles.getShaderFileNames();
 
-        for(auto i = 0; i < len; i++) {
-            if (path.compare(fileNames[i])) {
+        for (auto i = 0; i < len; i++) {
+            if (path.compare(fileNames[i]) !=  0) {
                 continue;
             }
 
@@ -725,16 +736,16 @@ int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
                 std::make_shared<ShaderProgram>();
 
             if (uiShaderPlatformIndex == SHADER_TOY) {
-                newProgram->setFragmentShaderPreSource(
-                    DefaultPreShaderToySource);
+                newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
             }
 
             compileShaderFromFile(newProgram,
-                                  program->getVertexShader().getPath(), path.string());
+                                  program->getVertexShader().getPath(),
+                                  path.string());
             editor.SetText(newProgram->getFragmentShader().getSource());
             editor.SetCursorPosition(TextEditor::Coordinates());
             programErrors = newProgram->getFragmentShader().getErrors();
-            SetProgramErrors(programErrors);
+            SetProgramErrors(programErrors, this->program);
             program.swap(newProgram);
             break;
         }
@@ -750,8 +761,8 @@ int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
 }
 
 void App::cleanup() {
-    sf.deleteImageFileNames();
-    sf.deleteShaderFileNamse();
+    shaderFiles.deleteImageFileNames();
+    shaderFiles.deleteShaderFileNamse();
 
     recording->cleanup();
 
@@ -762,7 +773,7 @@ void App::getUsedTextures(
     const UniformNames& uNames,
     std::map<std::string, std::shared_ptr<Image>>& usedTextures) {
     usedTextures.clear();
-    if (sf.getNumImageFileNames() > 0) {
+    if (shaderFiles.getNumImageFileNames() > 0) {
         auto& uniforms = program->getUniforms();
         for (auto it = uniforms.begin(); it != uniforms.end(); it++) {
             ShaderUniform& u = it->second;
@@ -771,11 +782,11 @@ void App::getUsedTextures(
                 u.name != uNames.backbuffer) {
                 int32_t& uiImage = imageUniformNameToIndex[u.name];
 
-                if (uiImage < 0 || uiImage >= sf.getNumImageFileNames()) {
+                if (uiImage < 0 || uiImage >= shaderFiles.getNumImageFileNames()) {
                     uiImage = 0;
                 }
 
-                usedTextures[u.name] = sf.getImage(uiImage);
+                usedTextures[u.name] = shaderFiles.getImage(uiImage);
             }
         }
     }
@@ -926,7 +937,7 @@ void App::onUiTimeWindow(float now) {
 
 void App::onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
                                int32_t& currentHeight) {
-    ImGui::Begin("BackBuffer", &uiBackBufferWindow,
+    ImGui::Begin("Buffer Size", &uiBackBufferWindow,
                  ImGuiWindowFlags_AlwaysAutoResize);
     const char* const items[] = {"0.5", "1", "2", "4", "8"};
     if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
@@ -977,13 +988,13 @@ void App::onUiUniformWindow(
                 ImGui::DragInt(u.name.c_str(), &u.value.i);
                 break;
             case UniformType::Sampler2D:
-                if (sf.getNumImageFileNames() > 0) {
+                if (shaderFiles.getNumImageFileNames() > 0) {
                     int32_t& uiImage = imageUniformNameToIndex[u.name];
 
                     if (ImGui::Combo(u.name.c_str(), &uiImage,
-                                     sf.getImageFileNames(),
-                                     sf.getNumImageFileNames())) {
-                        usedTextures[u.name] = sf.getImage(uiImage);
+                                     shaderFiles.getImageFileNames(),
+                                     shaderFiles.getNumImageFileNames())) {
+                        usedTextures[u.name] = shaderFiles.getImage(uiImage);
                     }
                 }
                 break;
@@ -1014,31 +1025,33 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
             std::make_shared<ShaderProgram>();
 
         if (uiShaderPlatformIndex == SHADER_TOY) {
-            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
+            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
         } else {
-            newProgram->setFragmentShaderPreSource(std::string());
+            newProgram->setFragmentShaderSourceTemplate(std::string());
         }
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
         if (programErrors.begin() != programErrors.end()) {
-            cursorLine = programErrors.begin()->first - 1;
+            cursorLine = programErrors.begin()->getLineNumber() - 1;
         }
-        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+        shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors);
+        SetProgramErrors(programErrors, newProgram);
 
         swapProgram(newProgram);
+
+        needRecompile = false;
     }
 
-    if (ImGui::Combo("File", &uiShaderFileIndex, sf.getShaderFileNames(),
-                     sf.getNumShaderFileNames())) {
-        auto newProgram = sf.getShaderFile(uiShaderFileIndex);
+    if (ImGui::Combo("File", &uiShaderFileIndex, shaderFiles.getShaderFileNames(),
+                     shaderFiles.getNumShaderFileNames())) {
+        auto newProgram = shaderFiles.getShaderFile(uiShaderFileIndex);
 
         if (uiShaderPlatformIndex == SHADER_TOY) {
-            newProgram->setFragmentShaderPreSource(DefaultPreShaderToySource);
+            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
         } else {
-            newProgram->setFragmentShaderPreSource(std::string());
+            newProgram->setFragmentShaderSourceTemplate(std::string());
         }
 
         newProgram->compile();
@@ -1048,14 +1061,16 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
 
         programErrors = newProgram->getFragmentShader().getErrors();
         if (programErrors.begin() != programErrors.end()) {
-            cursorLine = programErrors.begin()->first - 1;
+            cursorLine = programErrors.begin()->getLineNumber() - 1;
         }
 
-        sf.replaceNewProgram(uiShaderFileIndex, newProgram);
+        shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors);
+        SetProgramErrors(programErrors, newProgram);
 
         swapProgram(newProgram);
+
+        needRecompile = false;
     }
 
     ImGui::Checkbox("TextEditor", &uiShowTextEditor);
@@ -1078,8 +1093,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
                 std::make_shared<ShaderProgram>();
 
             if (uiShaderPlatformIndex == SHADER_TOY) {
-                newProgram->setFragmentShaderPreSource(
-                    DefaultPreShaderToySource);
+                newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
             }
 
             compileShaderFromFile(newProgram,
@@ -1089,17 +1103,46 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
 
             programErrors = newProgram->getFragmentShader().getErrors();
             if (programErrors.begin() != programErrors.end()) {
-                cursorLine = programErrors.begin()->first - 1;
+                cursorLine = programErrors.begin()->getLineNumber() - 1;
             }
 
-            SetProgramErrors(programErrors);
+            SetProgramErrors(programErrors, newProgram);
 
-            uiShaderFileIndex = sf.pushNewProgram(newProgram);
+            uiShaderFileIndex = shaderFiles.pushNewProgram(newProgram);
 
             program.swap(newProgram);
+
+            shaderFiles.loadFiles(fs::path(path).parent_path().string());
         }
     }
 #endif
+
+    ImGui::End();
+}
+
+void App::onUiErrorWindow() {
+    ImGui::Begin("Errors", &uiErrorWindow);
+    ImGui::SetWindowSize(ImVec2(800, 80), ImGuiCond_FirstUseEver);
+
+    for (auto iter = programErrors.begin(); iter != programErrors.end();
+         iter++) {
+        const auto line = iter->getLineNumber();
+
+        std::stringstream ss;
+
+        ss << iter->getOriginal() << std::endl;
+
+        bool selected = false;
+        if (ImGui::Selectable(ss.str().c_str(), selected)) {
+            if (line > 0 &&
+                fs::path(this->program->getFragmentShader().getPath())
+                        .compare(iter->getFileName()) == 0) {
+                TextEditor::Coordinates cursor;
+                cursor.mLine = line - 1;
+                editor.SetCursorPosition(cursor);
+            }
+        }
+    }
 
     ImGui::End();
 }

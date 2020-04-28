@@ -1,11 +1,14 @@
 #include "common.hpp"
 #include "file_utils.hpp"
+#include "app_log.hpp"
 
 #include <fstream>
 #include <streambuf>
 #include <algorithm>
+#include <memory>
 
 #ifndef _MSC_VER
+#include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -32,12 +35,13 @@ std::vector<std::string> openDir(std::string path) {
     hFind = FindFirstFileA(fileName.c_str(), &win32fd);
 
     if (hFind == INVALID_HANDLE_VALUE) {
+        AppLog::getInstance().error("failed to openDir.\n");
         return std::move(files);
     }
 
     do {
-        if (win32fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        } else {
+        if ((win32fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+            AppLog::getInstance().debug("file: %s\n", win32fd.cFileName);
             files.push_back(win32fd.cFileName);
         }
 
@@ -49,27 +53,43 @@ std::vector<std::string> openDir(std::string path) {
     struct stat statbuf;
 
     if ((dp = opendir(dir)) == NULL) {
-        return std::move(files);
+        AppLog::getInstance().error("failed to opendir.\n");
+        return files;
     }
 
     while ((entry = readdir(dp)) != NULL) {
         stat(entry->d_name, &statbuf);
-        if (S_ISDIR(statbuf.st_mode)) {
-        } else {
+#ifndef __EMSCRIPTEN__
+        if (S_ISREG(statbuf.st_mode)) {
+#endif
+            AppLog::getInstance().debug("readdir: %s\n", entry->d_name);
             files.push_back(entry->d_name);
+#ifndef __EMSCRIPTEN__
         }
+#endif
     }
     closedir(dp);
-
 #endif
-
-    return std::move(files);
+    return files;
 }
 
 bool readText(const std::string &path, std::string &memblock) {
-    std::ifstream fs(path, std::ifstream::in);
-    memblock.assign((std::istreambuf_iterator<char>(fs)),
-                    std::istreambuf_iterator<char>());
+    int32_t fd = open(path.c_str(), O_RDONLY | O_BINARY);
+
+    if (fd < 0) {
+        return false;
+    }
+
+    struct stat st;
+    fstat(fd, &st);
+
+    FILE *fp = fdopen(fd, "rb");
+    auto buf = std::make_unique<char []>(st.st_size);
+
+    fread(buf.get(), 1, st.st_size, fp);
+    memblock.assign(buf.get(), st.st_size);
+    fclose(fp);
+
     return true;
 }
 
@@ -82,7 +102,7 @@ void writeText(const std::string &path, const char *const memblock,
 
 int64_t getMTime(const std::string &path) {
 #ifdef __EMSCRIPTEN__
-    return 0;
+    return -1;
 #else
     int32_t fd = open(path.c_str(), O_RDONLY | O_BINARY);
 

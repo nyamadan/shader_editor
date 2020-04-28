@@ -64,7 +64,7 @@ GLint checkCompiled(GLuint shader, std::string& error) {
     return success;
 };
 
-void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
+void compileShaderFromFile(const std::shared_ptr<shader_editor::ShaderProgram> program,
                            const std::string& vsPath,
                            const std::string& fsPath) {
     int64_t vsTime = -1;
@@ -89,8 +89,8 @@ void compileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
     program->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
-void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram,
+void recompileFragmentShader(const std::shared_ptr<shader_editor::ShaderProgram> program,
+                             std::shared_ptr<shader_editor::ShaderProgram> newProgram,
                              const std::string& fsSource) {
     const std::string& vsPath = program->getVertexShader().getPath();
     const std::string& fsPath = program->getFragmentShader().getPath();
@@ -108,8 +108,8 @@ void recompileFragmentShader(const std::shared_ptr<ShaderProgram> program,
     newProgram->compile(vsPath, fsPath, vsSource, fsSource, vsTime, fsTime);
 }
 
-void recompileShaderFromFile(const std::shared_ptr<ShaderProgram> program,
-                             std::shared_ptr<ShaderProgram> newProgram) {
+void recompileShaderFromFile(const std::shared_ptr<shader_editor::ShaderProgram> program,
+                             std::shared_ptr<shader_editor::ShaderProgram> newProgram) {
     const std::string& vsPath = program->getVertexShader().getPath();
     const std::string& fsPath = program->getFragmentShader().getPath();
     int64_t vsTime = -1;

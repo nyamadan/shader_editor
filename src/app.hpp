@@ -59,7 +59,7 @@ class App {
     float uiVideoTime = 5.0f;
 
     std::map<std::string, int32_t> imageUniformNameToIndex;
-    std::map<int32_t, std::string> programErrors;
+    std::vector<CompileError> programErrors;
 
     int32_t windowWidth = 1024;
     int32_t windowHeight = 768;
@@ -78,7 +78,11 @@ class App {
     float timeStart = 0;
     uint64_t currentFrame = 0;
 
-    ShaderFiles sf;
+    const float recompileDelay = 0.5f;
+    bool needRecompile = false;
+    float lastTextEdited = 0;
+
+    ShaderFiles shaderFiles;
     Buffers buffers;
     TextEditor editor;
 
@@ -90,10 +94,11 @@ class App {
                      const int32_t uiVideoResolution, const int32_t kbps,
                      unsigned long encodeDeadline, float& uiTimeValue);
 
-    void App::SetProgramErrors(std::map<int32_t, std::string>& programErrors);
+    void SetProgramErrors(const std::vector<CompileError>& programErrors,
+                          std::shared_ptr<ShaderProgram> program);
 
-    void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram);
-    void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
+    void swapProgram(std::shared_ptr<ShaderProgram> newProgram);
+    void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                              int32_t uiPlatform);
 
    public:
@@ -110,6 +115,7 @@ class App {
 
     void onUiCaptureWindow();
     void onUiStatsWindow();
+    void onUiErrorWindow();
     void onUiTimeWindow(float now);
     void onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
                               int32_t& currentHeight);

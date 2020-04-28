@@ -12,16 +12,16 @@ class MyMkvWriter : public mkvmuxer::IMkvWriter {
     explicit MyMkvWriter(const std::string& file);
     virtual ~MyMkvWriter();
 
-    virtual int64_t Position() const;
-    virtual int32_t Position(int64_t position);
+    virtual mkvmuxer::int64 Position() const;
+    virtual mkvmuxer::int32 Position(mkvmuxer::int64 position);
     virtual bool Seekable() const;
-    virtual int32_t Write(const void* buffer, uint32_t length);
-    virtual void ElementStartNotify(uint64_t element_id, int64_t position);
+    virtual mkvmuxer::int32 Write(const void* buffer, mkvmuxer::uint32 length);
+    virtual void ElementStartNotify(mkvmuxer::uint64 element_id, mkvmuxer::int64 position);
 
     void Notify();
 
    private:
     FILE* fp;
-    uint64_t pos;
-    uint64_t len;
+    mkvmuxer::uint64 pos;
+    mkvmuxer::uint64 len;
 };

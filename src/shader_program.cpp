@@ -3,37 +3,81 @@
 #include "shader_utils.hpp"
 #include "file_utils.hpp"
 #include "shader_program.hpp"
+#include "shader_compiler.hpp"
 #include "default_shader.hpp"
 
 #include <regex>
 #include <sstream>
 
-void Shader::parseErrors(const std::string &error) {
-    const auto preSourceLines =
-        static_cast<int>(std::count(preSource.begin(), preSource.end(), '\n'));
+#include "../glslang/glslang/MachineIndependent/Scan.h"
+namespace {
 #ifdef __EMSCRIPTEN__
-    const std::regex re("^ERROR: \\d+:(\\d+): (.*)$");
+    const int32_t VertexShaderVersion = 100;
+    const int32_t FragmentShaderVersion = 100;
+    const bool IsGlslEs = true;
 #else
-    const std::regex re("^\\d\\((\\d+)\\) : (.*)$");
-    // const std::regex re("^[^:]+:\\s*\\d+:(\\d+):\\s*(.*)$");
+    const int32_t VertexShaderVersion = 420;
+    const int32_t FragmentShaderVersion = 420;
+    const bool IsGlslEs = false;
 #endif
+}
+
+namespace shader_editor {
+bool Shader::scanVersion(const std::string &shaderSource, int &version,
+                         EProfile &profile, bool &notFirstToken) {
+    const char *const s[] = {shaderSource.c_str()};
+    size_t l[] = {shaderSource.length()};
+    glslang::TInputScanner userInput(1, s, l);
+    return userInput.scanVersion(version, profile, notFirstToken);
+}
+
+bool Shader::parseSharderError(const std::string &line) {
+    const std::regex reShader("^([^:]+):\\s+(.+):(\\d+):(.*)$");
+    std::smatch m;
+    std::regex_match(line, m, reShader);
+    if (m.size() == 5) {
+        const auto errorType = m[1];
+        const auto fileName = m[2];
+        const auto lineNumber = std::atoi(m[3].str().c_str());
+        const std::string message = m[4].str();
+
+        errors.push_back(
+            CompileError(line, errorType, fileName, lineNumber, message));
+        return false;
+    }
+
+    return true;
+}
+
+bool Shader::parseProgramError(const std::string &line) {
+    const std::regex reShader("^([^:]+):\\s+(.+)$");
+    std::smatch m;
+    std::regex_match(line, m, reShader);
+    if (m.size() == 3) {
+        const auto errorType = m[1];
+        const std::string message = m[2].str();
+
+        errors.push_back(
+            CompileError(line, errorType, "", -1, message));
+        return false;
+    }
+
+    return true;
+}
+
+void Shader::parseGlslangErrors(const std::string &error) {
     std::istringstream ss(error);
     std::string line;
-    while (std::getline(ss, line)) {
-        std::smatch m;
-        std::regex_match(line, m, re);
-        if (m.size() == 3) {
-            const int32_t lineNumber =
-                std::atoi(m[1].str().c_str()) - preSourceLines;
-            const std::string message = m[2].str();
 
-            errors.insert(std::make_pair(lineNumber, message));
-        }
+    errors.clear();
+
+    while (std::getline(ss, line)) {
+        parseSharderError(line) && parseProgramError(line);
     }
 }
 
-void Shader::setPreSource(const std::string &preSource) {
-    this->preSource = preSource;
+void Shader::setSourceTemplate(const std::string &sourceTemplate) {
+    this->sourceTemplate = sourceTemplate;
 }
 
 void Shader::reset() {
@@ -46,7 +90,7 @@ void Shader::reset() {
     shader = 0;
     path = "";
     source = "";
-    preSource = "";
+    sourceTemplate = "";
     ok = false;
 
     mTime = 0;
@@ -68,18 +112,19 @@ bool Shader::compile() {
 
     std::string combinedSource;
 
-    combinedSource.append(preSource);
-    combinedSource.append(source);
+    if (!preCompile(combinedSource)) {
+        return false;
+    }
 
     shader = glCreateShader(type);
     const char *const pCombinedSource = combinedSource.c_str();
+
     glShaderSource(shader, 1, &pCombinedSource, NULL);
     glCompileShader(shader);
 
-    std::string error = "";
-
+    std::string error;
     if (!checkCompiled(shader, error)) {
-        parseErrors(error);
+        AppLog::getInstance().error(error.c_str());
         shader = 0;
         return false;
     }
@@ -91,14 +136,111 @@ bool Shader::compile() {
     return true;
 }
 
+bool Shader::preCompile(std::string &combinedSource) {
+    bool canCompile = false;
+    bool useTemplate = !sourceTemplate.empty();
+
+    int version;
+    EProfile profile;
+    bool notFirstToken;
+    scanVersion(useTemplate ? sourceTemplate : source, version, profile,
+                notFirstToken);
+
+    switch (profile) {
+        case ENoProfile:
+        case ECoreProfile:
+        case ECompatibilityProfile: {
+            canCompile = version >= 330;
+        } break;
+        case EEsProfile: {
+            canCompile = version >= 310;
+        } break;
+        default: {
+            canCompile = false;
+        } break;
+    }
+
+    bool isLinked = false;
+    std::string error;
+
+    if (canCompile) {
+        shader_compiler::CompileResult compileResult;
+        switch (type) {
+            case GL_VERTEX_SHADER: {
+                shader_compiler::compile(EShLangVertex, VertexShaderVersion,
+                                         IsGlslEs, path, source, sourceTemplate,
+                                         compileResult);
+            } break;
+
+            case GL_FRAGMENT_SHADER: {
+                shader_compiler::compile(EShLangFragment, FragmentShaderVersion,
+                                         IsGlslEs, path, source, sourceTemplate,
+                                         compileResult);
+            } break;
+        }
+
+        isLinked = compileResult.isCompiled && compileResult.isLinked;
+        error = compileResult.shaderLog + "\n" + compileResult.programLog;
+
+        dependencies.clear();
+
+        for (auto it = compileResult.dependencies.cbegin();
+             it != compileResult.dependencies.cend(); it++) {
+            const auto &path = *it;
+            const auto shader = std::make_shared<Shader>();
+
+            const int64_t mTime = getMTime(path);
+            std::string source = "";
+            readText(path, source);
+            shader->setCompileInfo(path, GL_FRAGMENT_SHADER, source, mTime);
+            dependencies.push_back(shader);
+        }
+
+        if (isLinked) {
+            combinedSource = compileResult.sourceCode;
+        }
+    } else {
+        shader_compiler::ValidateResult validationResult;
+        switch (type) {
+            case GL_VERTEX_SHADER: {
+                shader_compiler::validate(EShLangVertex, path, source,
+                                          validationResult);
+            } break;
+
+            case GL_FRAGMENT_SHADER: {
+                shader_compiler::validate(EShLangFragment, path, source,
+                                          validationResult);
+            } break;
+        }
+
+        isLinked = validationResult.isCompiled && validationResult.isLinked;
+        error = validationResult.shaderLog + "\n" + validationResult.programLog;
+
+        dependencies.clear();
+
+        if (isLinked) {
+            combinedSource = source;
+        }
+    }
+
+    if (!isLinked) {
+        parseGlslangErrors(error);
+        shader = 0;
+        return false;
+    }
+
+    return true;
+}
+
 bool Shader::compile(const std::string &path, GLuint type,
                      const std::string &source, int64_t mTime) {
     setCompileInfo(path, type, source, mTime);
 
     std::string combinedSource;
 
-    combinedSource.append(preSource);
-    combinedSource.append(source);
+    if (!preCompile(combinedSource)) {
+        return false;
+    }
 
     shader = glCreateShader(type);
     const char *const pCombinedSource = combinedSource.c_str();
@@ -106,9 +248,8 @@ bool Shader::compile(const std::string &path, GLuint type,
     glCompileShader(shader);
 
     std::string error;
-
     if (!checkCompiled(shader, error)) {
-        parseErrors(error);
+        AppLog::getInstance().error(error.c_str());
         shader = 0;
         return false;
     }
@@ -121,14 +262,27 @@ bool Shader::compile(const std::string &path, GLuint type,
 }
 
 bool Shader::checkExpired() const {
-    auto mTime = getMTime(this->path);
-    return mTime != this->mTime;
+    auto expired = false;
+    expired |= getMTime(this->path) != this->mTime;
+
+    for(auto it = dependencies.cbegin(); it != dependencies.cend(); it++) {
+        expired |= (*it)->checkExpired();
+    }
+
+    return expired;
 }
 
 bool Shader::checkExpiredWithReset() {
+    auto expired = false;
+
     int64_t mTime = getMTime(this->path.c_str());
-    bool expired = mTime != this->mTime;
+    expired |= mTime != this->mTime;
     this->mTime = mTime;
+
+    for(auto it = dependencies.begin(); it != dependencies.end(); it++) {
+        expired |= (*it)->checkExpiredWithReset();
+    }
+
     return expired;
 }
 
@@ -169,7 +323,6 @@ void ShaderProgram::applyAttribute(const std::string &name) {
 
 void ShaderProgram::applyAttributes() {
     for (auto iter = attributes.begin(); iter != attributes.end(); iter++) {
-        const std::string &name = iter->first;
         const ShaderAttribute &attr = iter->second;
 
         if (attr.location < 0) {
@@ -247,7 +400,7 @@ void ShaderProgram::setUniformValue(const std::string &name,
     this->setUniformVector4(name, value);
 }
 
-const bool ShaderProgram::containsUniform(const std::string &name) const {
+bool ShaderProgram::containsUniform(const std::string &name) const {
     return uniforms.count(name) != 0;
 }
 
@@ -294,7 +447,6 @@ void ShaderProgram::copyUniformsFrom(const ShaderProgram &program) {
 
 void ShaderProgram::applyUniforms() {
     for (auto iter = uniforms.begin(); iter != uniforms.end(); iter++) {
-        const std::string &name = iter->first;
         const ShaderUniform &u = iter->second;
 
         if (u.location < 0) {
@@ -364,39 +516,40 @@ GLuint ShaderProgram::compile() {
         program = 0;
     }
 
-    AppLog::getInstance().addLog("(%s, %s): compling started.\n",
-                                 vertexShader.getPath().c_str(),
-                                 fragmentShader.getPath().c_str());
+    AppLog::getInstance().info("(%s, %s): compling started\n",
+                               vertexShader.getPath().c_str(),
+                               fragmentShader.getPath().c_str());
 
     double t0 = glfwGetTime();
 
     if (!vertexShader.compile()) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
-                                     vertexShader.getPath().c_str());
         const auto &errors = vertexShader.getErrors();
         for (auto iter = errors.begin(); errors.end() != iter; iter++) {
-            AppLog::getInstance().addLog("%04d: %s\n", iter->first,
-                                         iter->second.c_str());
+            AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());
         }
+
+        AppLog::getInstance().error("(%s) Shader compilation failed\n", vertexShader.getPath().c_str());
         return 0;
     }
 
     if (!fragmentShader.compile()) {
-        AppLog::getInstance().addLog("(%s) Shader compilation failed:\n",
-                                     fragmentShader.getPath().c_str());
         const auto &errors = fragmentShader.getErrors();
         for (auto iter = errors.begin(); errors.end() != iter; iter++) {
-            AppLog::getInstance().addLog("%04d: %s\n", iter->first,
-                                         iter->second.c_str());
+            AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());
         }
+
+        AppLog::getInstance().error("(%s) Shader compilation failed\n",
+                                    fragmentShader.getPath().c_str());
         return 0;
     }
 
     link();
 
     if (!checkLinked(program, error)) {
-        AppLog::getInstance().addLog("Program linking failed:\n%s",
-                                     error.c_str());
+        AppLog::getInstance().error("Program linking failed:%s\n", error.c_str());
+        AppLog::getInstance().error("(%s, %s): Shader compilation failed\n",
+                                    vertexShader.getPath().c_str(),
+                                    fragmentShader.getPath().c_str());
         return 0;
     }
 
@@ -407,9 +560,9 @@ GLuint ShaderProgram::compile() {
 
     compileTime = glfwGetTime() - t0;
 
-    AppLog::getInstance().addLog("(%s, %s): Program linking ok (%.2fs)\n",
-                                 vertexShader.getPath().c_str(),
-                                 fragmentShader.getPath().c_str(), compileTime);
+    AppLog::getInstance().info("(%s, %s): Program linking ok (%.2fs)\n",
+                               vertexShader.getPath().c_str(),
+                               fragmentShader.getPath().c_str(), compileTime);
 
     return program;
 }
@@ -426,7 +579,7 @@ GLuint ShaderProgram::compile(const std::string &vsPath,
 void ShaderProgram::loadUniforms() {
     GLint count;
     glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
-    AppLog::getInstance().addLog("Active Uniforms: %d\n", count);
+    AppLog::getInstance().debug("Active Uniforms: %d\n", count);
     for (GLint i = 0; i < count; i++) {
         const GLsizei bufSize = 128;
         GLchar name[bufSize];
@@ -441,41 +594,41 @@ void ShaderProgram::loadUniforms() {
             case GL_FLOAT:
                 uniform(name, UniformType::Float);
                 setUniformValue(name, 0.0f);
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Float, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC2:
                 uniform(name, UniformType::Vector2);
                 setUniformValue(name, glm::vec2(0.0f, 0.0f));
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Vector2, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC3:
                 uniform(name, UniformType::Vector3);
                 setUniformValue(name, glm::vec3(0.0f, 0.0f, 0.0f));
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Vector3, Name: %s\n", i, name);
                 break;
             case GL_FLOAT_VEC4:
                 uniform(name, UniformType::Vector4);
                 setUniformValue(name, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Vector4, Name: %s\n", i, name);
                 break;
             case GL_INT:
                 uniform(name, UniformType::Integer);
                 setUniformValue(name, 0);
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Integer, Name: %s\n", i, name);
                 break;
             case GL_SAMPLER_2D:
                 uniform(name, UniformType::Sampler2D);
                 setUniformValue(name, 0);
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "Uniform #%d Type: Sampler2D, Name: %s\n", i, name);
                 break;
             default:
-                AppLog::getInstance().addLog(
+                AppLog::getInstance().debug(
                     "[Warning] Unsupported uniform #%d Type: 0x%04X Name: %s\n",
                     i, type, name);
                 break;
@@ -487,7 +640,7 @@ void ShaderProgram::loadAttributes() {
     GLint count;
 
     glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &count);
-    AppLog::getInstance().addLog("Active Attributes: %d\n", count);
+    AppLog::getInstance().debug("Active Attributes: %d\n", count);
 
     for (int i = 0; i < count; i++) {
         const GLsizei bufSize = 128;
@@ -511,8 +664,8 @@ void ShaderProgram::loadAttributes() {
                 break;
         }
 
-        AppLog::getInstance().addLog("Attribute #%d Type: %04X Name: %s\n", i,
-                                     type, name);
+        AppLog::getInstance().debug("Attribute #%d Type: %04X Name: %s\n", i,
+                                    type, name);
     }
 }
 
@@ -558,3 +711,4 @@ const std::string ShaderUniform::toString() const {
 
     return ss.str();
 }
+}  // namespace shader_editor

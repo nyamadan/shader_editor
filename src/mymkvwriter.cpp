@@ -6,16 +6,16 @@ MyMkvWriter::MyMkvWriter(const std::string &file) : pos(0), len(0) {
 
 MyMkvWriter::~MyMkvWriter() {}
 
-int32_t MyMkvWriter::Write(const void* buffer, uint32_t length) {
+mkvmuxer::int32 MyMkvWriter::Write(const void* buffer, mkvmuxer::uint32 length) {
     fwrite(buffer, sizeof(uint8_t), length, fp);
     len += length;
     pos += length;
     return 0;
 }
 
-int64_t MyMkvWriter::Position() const { return pos; }
+mkvmuxer::int64 MyMkvWriter::Position() const { return pos; }
 
-int32_t MyMkvWriter::Position(int64_t position) {
+mkvmuxer::int32 MyMkvWriter::Position(mkvmuxer::int64 position) {
     pos = position;
     fseek(fp, pos, SEEK_SET);
     return 0;
@@ -23,7 +23,7 @@ int32_t MyMkvWriter::Position(int64_t position) {
 
 bool MyMkvWriter::Seekable() const { return true; }
 
-void MyMkvWriter::ElementStartNotify(uint64_t, int64_t) {}
+void MyMkvWriter::ElementStartNotify(mkvmuxer::uint64, mkvmuxer::int64) {}
 
 void MyMkvWriter::Notify() {
     fclose(fp);

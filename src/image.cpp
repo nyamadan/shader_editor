@@ -69,7 +69,7 @@ bool Image::load() {
                          GL_UNSIGNED_BYTE, data);
             break;
         default:
-            AppLog::getInstance().addLog("Texture Channel Error: %d\n",
+            AppLog::getInstance().error("Texture Channel Error: %d\n",
                                          channels);
             break;
     }
