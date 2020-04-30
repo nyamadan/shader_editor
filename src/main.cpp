@@ -23,9 +23,12 @@ void SetClipboardText(const std::string &text)
 #ifdef __EMSCRIPTEN__
 EM_ASM({
     const copyText = document.querySelector("#copy");
+    const canvas = document.querySelector("#canvas").focus();
     copyText.textContent = UTF8ToString($0);
+    copyText.focus();
     copyText.select();
     document.execCommand("copy");
+    canvas.focus();
 }, text.c_str());
 #endif
 }
