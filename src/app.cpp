@@ -603,13 +603,6 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
         ImGui::EndMenuBar();
     }
 
-#ifdef __EMSCRIPTEN__
-    std::string clipboardText = ImGui::GetClipboardText();
-    if (!editor.IsReadOnly() && !clipboardText.empty()) {
-        editor.Paste();
-    }
-#endif
-
     ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s", cpos.mLine + 1,
                 cpos.mColumn + 1, editor.GetTotalLines(),
                 editor.IsOverwrite() ? "Ovr" : "Ins",
@@ -1091,10 +1084,6 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
             cursorLine = -1;
         }
     }
-
-#ifdef __EMSCRIPTEN__
-    ImGui::GetIO().SetClipboardTextFn(mainWindow, "");
-#endif
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
     if (ImGui::Button("Open")) {
