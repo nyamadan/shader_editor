@@ -19,6 +19,15 @@ static auto clipboardText = std::string("");
 void SetClipboardText(const std::string &text)
 {
     clipboardText = text;
+
+#ifdef __EMSCRIPTEN__
+EM_ASM({
+    const copyText = document.querySelector("#clipboard");
+    const copyText.textContent = UTF8ToString($0);
+    copyText.select();
+    document.execCommand("copy");
+}, text.c_str())
+#endif
 }
 
 #ifdef __EMSCRIPTEN__
