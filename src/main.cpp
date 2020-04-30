@@ -96,6 +96,6 @@ int main(const int argc, const char** const argv) {
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_BINDINGS(clipboard_module) {
-    function("SetClipboardText", &::SetClipboardTextImpl);
+    function("SetClipboardText", &::SetClipboardText);
 }
 #endif
