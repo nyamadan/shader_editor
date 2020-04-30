@@ -2,7 +2,8 @@ Module.arguments = ["-linfo", "./assets"];
 
 const copy = document.createElement("textarea");
 copy.id = "copy";
-copy.style.display = "none";
+copy.readOnly = true;
+copy.setAttribute("style", "width: 0; height: 0;");
 document.body.appendChild(copy);
 
 document.body.addEventListener("paste", (event) => {
