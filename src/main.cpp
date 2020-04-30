@@ -38,7 +38,7 @@ EM_ASM({
     copyText.select();
     document.execCommand("copy");
     // canvas.focus();
-}, text.c_str());
+}, text);
 #endif
 
     SetClipboardText(text);
