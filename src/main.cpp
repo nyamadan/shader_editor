@@ -16,8 +16,13 @@ shader_editor::App app;
 
 static auto clipboardText = std::string("");
 
-void SetClipboardTextImpl(void *userData, const char *text) {
+void SetClipboardText(const char *text)
+{
     clipboardText = text;
+}
+
+void SetClipboardTextImpl(void *userData, const char *text) {
+    SetClipboardText(text);
 }
 
 const char* GetClipboardTextImpl(void *userData) {
@@ -91,6 +96,6 @@ int main(const int argc, const char** const argv) {
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_BINDINGS(clipboard_module) {
-    function("SetClipboardText", &SetClipboardTextImpl);
+    function("SetClipboardText", &::SetClipboardTextImpl);
 }
 #endif
