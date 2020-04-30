@@ -16,7 +16,7 @@ shader_editor::App app;
 
 static auto clipboardText = std::string("");
 
-void SetClipboardText(const char *text)
+void SetClipboardText(const std::string &text)
 {
     clipboardText = text;
 }
