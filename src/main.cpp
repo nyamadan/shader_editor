@@ -19,7 +19,16 @@ static auto clipboardText = std::string("");
 void SetClipboardText(const std::string &text)
 {
     clipboardText = text;
+}
 
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_BINDINGS(clipboard_module) {
+    function("SetClipboardText", &SetClipboardText);
+}
+#endif
+
+
+void SetClipboardTextImpl(void *, const char *text) {
 #ifdef __EMSCRIPTEN__
 EM_ASM({
     const copyText = document.querySelector("#copy");
@@ -31,16 +40,7 @@ EM_ASM({
     // canvas.focus();
 }, text.c_str());
 #endif
-}
 
-#ifdef __EMSCRIPTEN__
-EMSCRIPTEN_BINDINGS(clipboard_module) {
-    function("SetClipboardText", &SetClipboardText);
-}
-#endif
-
-
-void SetClipboardTextImpl(void *, const char *text) {
     SetClipboardText(text);
 }
 
