@@ -26,7 +26,7 @@ EM_ASM({
     const copyText.textContent = UTF8ToString($0);
     copyText.select();
     document.execCommand("copy");
-}, text.c_str())
+}, text.c_str());
 #endif
 }
 
