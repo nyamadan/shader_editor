@@ -21,11 +21,18 @@ void SetClipboardText(const char *text)
     clipboardText = text;
 }
 
-void SetClipboardTextImpl(void *userData, const char *text) {
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_BINDINGS(clipboard_module) {
+    function("SetClipboardText", &SetClipboardText);
+}
+#endif
+
+
+void SetClipboardTextImpl(void *, const char *text) {
     SetClipboardText(text);
 }
 
-const char* GetClipboardTextImpl(void *userData) {
+const char* GetClipboardTextImpl(void *) {
     return clipboardText.c_str();
 }
 
@@ -93,9 +100,3 @@ int main(const int argc, const char** const argv) {
 
     return 0;
 }
-
-#ifdef __EMSCRIPTEN__
-EMSCRIPTEN_BINDINGS(clipboard_module) {
-    function("SetClipboardText", &::SetClipboardText);
-}
-#endif
