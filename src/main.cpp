@@ -2,10 +2,27 @@
 #include "app_log.hpp"
 
 #include <args.hxx>
+
 #include <iostream>
+#include <memory>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/bind.h>
+using namespace emscripten;
+#endif
 
 namespace {
 shader_editor::App app;
+
+static auto clipboardText = std::string("");
+
+void SetClipboardTextImpl(void *userData, const char *text) {
+    clipboardText = text;
+}
+
+const char* GetClipboardTextImpl(void *userData) {
+    return clipboardText.c_str();
+}
 
 void update(void*) { app.update(nullptr); }
 }  // namespace
@@ -49,6 +66,11 @@ int main(const int argc, const char** const argv) {
 
     app.start(assetPath.Get(), top.Get());
 
+#ifdef __EMSCRIPTEN__
+    ImGui::GetIO().SetClipboardTextFn = SetClipboardTextImpl;
+    ImGui::GetIO().GetClipboardTextFn = GetClipboardTextImpl;
+#endif
+
 #ifndef __EMSCRIPTEN__
     glfwSwapInterval(1);
 
@@ -66,3 +88,9 @@ int main(const int argc, const char** const argv) {
 
     return 0;
 }
+
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_BINDINGS(clipboard_module) {
+    function("SetClipboardText", &SetClipboardTextImpl);
+}
+#endif

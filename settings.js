@@ -1,1 +1,1 @@
-Module.arguments = ["-ldebug", "./assets"];
+Module.arguments = ["-linfo", "./assets"];

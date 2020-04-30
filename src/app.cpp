@@ -31,7 +31,7 @@ namespace fs = std::filesystem;
 
 namespace {
 void glfwErrorCallback(int error, const char* description) {
-    AppLog::getInstance().error("error %d: %s\n", error, description);
+    AppLog::getInstance().error("GLFW_ERROR %d: %s\n", error, description);
 }
 
 #ifndef __EMSCRIPTEN__
@@ -40,6 +40,8 @@ void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
                    const void* user_param) {
     switch (severity) {
         case GL_DEBUG_SEVERITY_NOTIFICATION:
+            AppLog::getInstance().debug("GL_DEBUG_SEVERITY_DEBUG(%X): %s\n", eid,
+                                        message);
             break;
         case GL_DEBUG_SEVERITY_LOW:
             AppLog::getInstance().error("GL_DEBUG_SEVERITY_LOW(%X): %s\n", eid,
@@ -602,6 +604,14 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
         ImGui::EndMenuBar();
     }
 
+#ifdef __EMSCRIPTEN__
+    std::string clipboardText = ImGui::GetClipboardText();
+    if (!clipboardText.empty()) {
+        editor.Paste();
+        editor.SetText(editor.GetText());
+    }
+#endif
+
     ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s", cpos.mLine + 1,
                 cpos.mColumn + 1, editor.GetTotalLines(),
                 editor.IsOverwrite() ? "Ovr" : "Ins",
@@ -1083,6 +1093,10 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
             cursorLine = -1;
         }
     }
+
+#ifdef __EMSCRIPTEN__
+    ImGui::GetIO().SetClipboardTextFn(mainWindow, "");
+#endif
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
     if (ImGui::Button("Open")) {
