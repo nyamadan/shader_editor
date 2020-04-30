@@ -605,7 +605,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
 
 #ifdef __EMSCRIPTEN__
     std::string clipboardText = ImGui::GetClipboardText();
-    if (!ro && !clipboardText.empty()) {
+    if (!editor.IsReadOnly() && !clipboardText.empty()) {
         editor.Paste();
     }
 #endif
