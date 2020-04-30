@@ -579,7 +579,6 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
             if (ImGui::MenuItem("Paste", "Ctrl-V", nullptr,
                                 !ro && ImGui::GetClipboardText() != nullptr)) {
                 editor.Paste();
-                editor.SetText(editor.GetText());
             }
 
             ImGui::Separator();
@@ -606,9 +605,8 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
 
 #ifdef __EMSCRIPTEN__
     std::string clipboardText = ImGui::GetClipboardText();
-    if (!clipboardText.empty()) {
+    if (!ro && !clipboardText.empty()) {
         editor.Paste();
-        editor.SetText(editor.GetText());
     }
 #endif
 
