@@ -22,7 +22,7 @@ void SetClipboardText(const std::string &text)
 
 #ifdef __EMSCRIPTEN__
 EM_ASM({
-    const copyText = document.querySelector("#clipboard");
+    const copyText = document.querySelector("#copy");
     copyText.textContent = UTF8ToString($0);
     copyText.select();
     document.execCommand("copy");
