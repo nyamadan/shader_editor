@@ -1,9 +1,5 @@
 Module.arguments = ["-linfo", "./assets"];
 
-const copy = document.createElement("textarea");
-copy.id = "copy";
-document.body.appendChild(copy);
-
 document.body.addEventListener("paste", (event) => {
   if (event.target !== document.body) {
     return;

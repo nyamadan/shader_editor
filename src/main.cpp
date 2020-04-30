@@ -31,13 +31,12 @@ EMSCRIPTEN_BINDINGS(clipboard_module) {
 void SetClipboardTextImpl(void *, const char *text) {
 #ifdef __EMSCRIPTEN__
 EM_ASM({
-    const copyText = document.querySelector("#copy");
-    // const canvas = document.querySelector("#canvas");
-    copyText.textContent = UTF8ToString($0);
-    // copyText.focus();
-    copyText.select();
+    const copy = document.createElement("textarea");
+    document.body.appendChild(copy);
+    copy.textContent = UTF8ToString($0);
+    copy.select();
     document.execCommand("copy");
-    // canvas.focus();
+    document.body.removeChild(copy);
 }, text);
 #endif
 
