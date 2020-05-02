@@ -37,6 +37,9 @@
 
         console.log(text);
       }),
+      onRuntimeInitialized: function() {
+        Module.setCanvasSize(window.innerWidth, window.innerHeight);
+      },
       printErr: function(text) {
         if (arguments.length > 1) {
           text = Array.prototype.slice.call(arguments).join(' ');
@@ -54,8 +57,6 @@
           alert('WebGL context lost. You will need to reload the page.');
           e.preventDefault();
         }, false);
-
-        Module.setCanvasSize(window.innerWidth, window.innerHeight);
 
         return canvas;
       })(),
