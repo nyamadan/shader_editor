@@ -27,6 +27,7 @@
     const progressElement = document.getElementById('progress');
 
     var Module = {
+      arguments: ["-linfo", "./assets"],
       preRun: [],
       postRun: [],
       print: (function(){
@@ -59,14 +60,11 @@
         return canvas;
       })(),
       monitorRunDependencies: function (left) {
-        console.log(left);
       }
     };
 
     window.addEventListener("resize", () => {
-      const canvas = document.getElementById("canvas");
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      Module.setCanvasSize(window.innerWidth, window.innerHeight);
     }, false);
   </script>
   {{{ SCRIPT }}}
