@@ -29,7 +29,9 @@
     var Module = {
       arguments: ["-linfo", "./assets"],
       preRun: [],
-      postRun: [],
+      postRun: [function () {
+        Module.setCanvasSize(window.innerWidth, window.innerHeight);
+      }],
       print: (function(){
         if (arguments.length > 1) {
           text = Array.prototype.slice.call(arguments).join(' ');
@@ -37,9 +39,6 @@
 
         console.log(text);
       }),
-      onRuntimeInitialized: function() {
-        Module.setCanvasSize(window.innerWidth, window.innerHeight);
-      },
       printErr: function(text) {
         if (arguments.length > 1) {
           text = Array.prototype.slice.call(arguments).join(' ');

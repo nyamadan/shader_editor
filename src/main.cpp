@@ -33,6 +33,7 @@ void SetClipboardTextImpl(void *, const char *text) {
 EM_ASM({
     const copy = document.createElement("textarea");
     document.body.appendChild(copy);
+    copy.style.position = "absolute";
     copy.textContent = UTF8ToString($0);
     copy.focus();
     copy.select();
