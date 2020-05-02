@@ -34,9 +34,11 @@ EM_ASM({
     const copy = document.createElement("textarea");
     document.body.appendChild(copy);
     copy.textContent = UTF8ToString($0);
+    copy.focus();
     copy.select();
     document.execCommand("copy");
     document.body.removeChild(copy);
+    Module.canvas.focus();
 }, text);
 #endif
 
