@@ -42,7 +42,7 @@
         }
         console.error(text);
       },
-      canvas: (() => {
+      canvas: (function(){
         const canvas = document.getElementById("canvas");
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -57,7 +57,7 @@
         }, false);
 
         return canvas;
-      }),
+      })(),
       monitorRunDependencies: function (left) {
         console.log(left);
       }
