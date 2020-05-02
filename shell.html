@@ -19,16 +19,15 @@
 </head>
 
 <body>
-  <div class="main">
-  </div>
-  <canvas id="canvas" class="main"></canvas>
+  <canvas id="canvas"></canvas>
   <div>
     <progress value="0" max="100" id="progress" hidden=1></progress>
   </div>
   <script>
     const progressElement = document.getElementById('progress');
 
-    const Module = {
+    var Module = {
+      arguments: ["-linfo", "./assets"],
       preRun: [],
       postRun: [],
       print: (() => {
