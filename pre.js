@@ -1,3 +1,5 @@
+Module.arguments = ["-linfo", "./assets"];
+
 document.body.addEventListener("paste", (event) => {
   if (event.target !== document.body) {
     return;
