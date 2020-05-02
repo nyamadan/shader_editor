@@ -45,8 +45,6 @@
       },
       canvas: (function(){
         const canvas = document.getElementById("canvas");
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
 
         canvas.addEventListener("contextmenu", (e) => {
           e.preventDefault();
@@ -56,6 +54,8 @@
           alert('WebGL context lost. You will need to reload the page.');
           e.preventDefault();
         }, false);
+
+        Module.setCanvasSize(window.innerWidth, window.innerHeight);
 
         return canvas;
       })(),
