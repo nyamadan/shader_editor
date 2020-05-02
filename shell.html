@@ -29,14 +29,14 @@
     var Module = {
       preRun: [],
       postRun: [],
-      print: (() => {
+      print: (function(){
         if (arguments.length > 1) {
           text = Array.prototype.slice.call(arguments).join(' ');
         }
 
         console.log(text);
       }),
-      printErr: (text) => {
+      printErr: function(text) {
         if (arguments.length > 1) {
           text = Array.prototype.slice.call(arguments).join(' ');
         }
