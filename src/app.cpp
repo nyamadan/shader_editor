@@ -40,8 +40,8 @@ void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
                    const void* user_param) {
     switch (severity) {
         case GL_DEBUG_SEVERITY_NOTIFICATION:
-            AppLog::getInstance().detail("GL_DEBUG_SEVERITY_DEBUG(%X): %s\n", eid,
-                                        message);
+            AppLog::getInstance().detail("GL_DEBUG_SEVERITY_DEBUG(%X): %s\n",
+                                         eid, message);
             break;
         case GL_DEBUG_SEVERITY_LOW:
             AppLog::getInstance().error("GL_DEBUG_SEVERITY_LOW(%X): %s\n", eid,
@@ -73,26 +73,92 @@ void EnableOpenGLDebugExtention() {
 }  // namespace
 
 namespace shader_editor {
-UniformNames App::getUniformNames(ShaderPlatform platform) {
+UniformNames App::getCurrentUniformNames() {
     UniformNames uNames;
-    switch (platform) {
-        case GLSL_SANDBOX:
-            uNames.time = "time";
-            uNames.resolution = "resolution";
-            uNames.mouse = "mouse";
-            uNames.backbuffer = "backbuffer";
-            uNames.frame = "";
-            break;
-        case SHADER_TOY:
+    switch (uiShaderPlatformIndex) {
+        case SHADER_TOY: {
             uNames.time = "iTime";
             uNames.resolution = "iResolution";
             uNames.mouse = "iMouse";
             uNames.frame = "iFrame";
             uNames.backbuffer = "";
-            break;
+        } break;
+
+        case GLSL_SANDBOX:
+        default: {
+            uNames.time = "time";
+            uNames.resolution = "resolution";
+            uNames.mouse = "mouse";
+            uNames.backbuffer = "backbuffer";
+            uNames.frame = "";
+
+        } break;
     }
 
     return uNames;
+}
+
+void App::applyShaderUniform(const UniformNames& uNames,
+                             const bool* const mouseDown,
+                             const ImVec2& mousePos) {
+    // uniform values
+    program->setUniformValue(
+        uNames.resolution,
+        glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
+                  static_cast<GLfloat>(buffers.getHeight())));
+
+    switch (uiShaderPlatformIndex) {
+        case GLSL_SANDBOX: {
+            if (recording->getIsRecording()) {
+                program->setUniformValue(uNames.mouse, glm::vec2(0.5f, 0.5f));
+            } else {
+                program->setUniformValue(
+                    uNames.mouse, glm::vec2(mousePos.x / windowWidth,
+                                            1.0f - mousePos.y / windowHeight));
+            }
+        } break;
+        case SHADER_TOY: {
+            program->setUniformValue(uNames.frame,
+                                     static_cast<int>(currentFrame));
+
+            if (recording->getIsRecording()) {
+                program->setUniformValue(
+                    uNames.mouse, glm::vec4(0.5f * windowWidth,
+                                            0.5f * windowHeight, 0.0f, 0.0f));
+            } else {
+                if (mouseDown[0] || mouseDown[1]) {
+                    program->setUniformValue(
+                        uNames.mouse,
+                        glm::vec4(mousePos.x, windowHeight - mousePos.y,
+                                  mouseDown[0] ? 1.0f : 0.0f,
+                                  mouseDown[1] ? 1.0f : 0.0f));
+                } else {
+                    if (program->containsUniform(uNames.mouse)) {
+                        const glm::vec4& prevMousePos =
+                            program->getUniform(uNames.mouse).value.vec4;
+                        program->setUniformValue(
+                            uNames.mouse,
+                            glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
+                    }
+                }
+            }
+        } break;
+    }
+
+    program->setUniformValue(uNames.time, uiTimeValue);
+}
+
+void App::setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram) {
+    switch (uiShaderPlatformIndex) {
+        case SHADER_TOY: {
+            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
+        } break;
+
+        case GLSL_SANDBOX:
+        default: {
+            newProgram->setFragmentShaderSourceTemplate(std::string());
+        } break;
+    }
 }
 
 std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
@@ -113,13 +179,7 @@ std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
                 editor.SetText(text);
                 editor.SetCursorPosition(TextEditor::Coordinates());
             } else {
-                if (uiShaderPlatformIndex == SHADER_TOY) {
-                    newProgram->setFragmentShaderSourceTemplate(
-                        ShaderToyTemplate);
-                } else {
-                    newProgram->setFragmentShaderSourceTemplate(std::string());
-                }
-
+                setupShaderTemplate(newProgram);
                 recompileShaderFromFile(program, newProgram);
 
                 programErrors = newProgram->getFragmentShader().getErrors();
@@ -150,7 +210,7 @@ void App::update(void*) {
 
     float now = static_cast<float>(ImGui::GetTime());
 
-    auto uNames = getUniformNames(uiShaderPlatformIndex);
+    auto uNames = getCurrentUniformNames();
 
     glfwMakeContextCurrent(mainWindow);
     glfwGetFramebufferSize(mainWindow, &currentWidth, &currentHeight);
@@ -166,14 +226,10 @@ void App::update(void*) {
         lastTextEdited = now;
     }
 
-    if(needRecompile && now > lastTextEdited + recompileDelay){
+    if (needRecompile && now > lastTextEdited + recompileDelay) {
         needRecompile = false;
 
-        if (uiShaderPlatformIndex == SHADER_TOY) {
-            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
-        } else {
-            newProgram->setFragmentShaderSourceTemplate(std::string());
-        }
+        setupShaderTemplate(newProgram);
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
@@ -291,51 +347,7 @@ void App::update(void*) {
     glViewport(0, 0, buffers.getWidth(), buffers.getHeight());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // uniform values
-    program->setUniformValue(
-        uNames.resolution,
-        glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
-                  static_cast<GLfloat>(buffers.getHeight())));
-
-    switch (uiShaderPlatformIndex) {
-        case 0:
-            if (recording->getIsRecording()) {
-                program->setUniformValue(uNames.mouse, glm::vec2(0.5f, 0.5f));
-            } else {
-                program->setUniformValue(
-                    uNames.mouse, glm::vec2(mousePos.x / windowWidth,
-                                            1.0f - mousePos.y / windowHeight));
-            }
-            break;
-        case 1:
-            program->setUniformValue(uNames.frame,
-                                     static_cast<int>(currentFrame));
-
-            if (recording->getIsRecording()) {
-                program->setUniformValue(
-                    uNames.mouse, glm::vec4(0.5f * windowWidth,
-                                            0.5f * windowHeight, 0.0f, 0.0f));
-            } else {
-                if (mouseDown[0] || mouseDown[1]) {
-                    program->setUniformValue(
-                        uNames.mouse,
-                        glm::vec4(mousePos.x, windowHeight - mousePos.y,
-                                  mouseDown[0] ? 1.0f : 0.0f,
-                                  mouseDown[1] ? 1.0f : 0.0f));
-                } else {
-                    if (program->containsUniform(uNames.mouse)) {
-                        const glm::vec4& prevMousePos =
-                            program->getUniform(uNames.mouse).value.vec4;
-                        program->setUniformValue(
-                            uNames.mouse,
-                            glm::vec4(prevMousePos.x, prevMousePos.y, 0, 0));
-                    }
-                }
-            }
-            break;
-    }
-
-    program->setUniformValue(uNames.time, uiTimeValue);
+    applyShaderUniform(uNames, mouseDown, mousePos);
 
     if (program->isOK()) {
         glUseProgram(program->getProgram());
@@ -420,14 +432,12 @@ void App::update(void*) {
     glfwPollEvents();
 }
 
-void App::startRecord(const std::string& fileName,
-                      const int32_t uiVideoTypeIndex,
-                      const int32_t uiVideoResolution, const int32_t kbps,
-                      unsigned long encodeDeadline, float& uiTimeValue) {
+void App::startRecord(const std::string& fileName, const int32_t kbps,
+                      unsigned long encodeDeadline) {
     currentFrame = 0;
     uiTimeValue = 0;
 
-    switch (uiVideoResolution) {
+    switch (uiVideoResolutionIndex) {
         case 0:
             buffers.updateFrameBuffersSize(256, 144);
             break;
@@ -496,10 +506,9 @@ void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
     program.swap(newProgram);
 }
 
-void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
-                         int32_t uiShaderPlatformIndex) {
+void App::onTextEditor() {
     auto cpos = editor.GetCursorPosition();
-    ImGui::Begin("Text Editor", &showTextEditor, ImGuiWindowFlags_MenuBar);
+    ImGui::Begin("Text Editor", &uiShowTextEditor, ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -508,7 +517,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                 const char* const buffer = textToSave.c_str();
                 const int64_t size = textToSave.size();
 
-                if (uiShader != 0) {
+                if (uiShaderFileIndex != 0) {
                     writeText(program->getFragmentShader().getPath(), buffer,
                               static_cast<int32_t>(size));
                 } else {
@@ -519,10 +528,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         std::shared_ptr<ShaderProgram> newProgram =
                             std::make_shared<ShaderProgram>();
 
-                        if (uiShaderPlatformIndex == SHADER_TOY) {
-                            newProgram->setFragmentShaderSourceTemplate(
-                                ShaderToyTemplate);
-                        }
+                        setupShaderTemplate(newProgram);
 
                         writeText(path, buffer, static_cast<int32_t>(size));
 
@@ -538,7 +544,8 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
                         newProgram->compile(vsPath, fsPath, vsSource, fsSource,
                                             vsTime, fsTime);
 
-                        uiShader = shaderFiles.pushNewProgram(newProgram);
+                        uiShaderFileIndex =
+                            shaderFiles.pushNewProgram(newProgram);
 
                         program.swap(newProgram);
                     }
@@ -546,7 +553,7 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
             }
 
             if (ImGui::MenuItem("Close")) {
-                showTextEditor = false;
+                uiShowTextEditor = false;
             }
 
             ImGui::EndMenu();
@@ -614,7 +621,8 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-int32_t App::start(int32_t width, int32_t height, const std::string& assetPath, bool alwaysOnTop) {
+int32_t App::start(int32_t width, int32_t height, const std::string& assetPath,
+                   bool alwaysOnTop) {
     this->windowWidth = width;
     this->windowHeight = height;
 
@@ -730,7 +738,7 @@ int32_t App::start(int32_t width, int32_t height, const std::string& assetPath, 
         const auto fileNames = shaderFiles.getShaderFileNames();
 
         for (auto i = 0; i < len; i++) {
-            if (path.compare(fileNames[i]) !=  0) {
+            if (path.compare(fileNames[i]) != 0) {
                 continue;
             }
 
@@ -739,9 +747,7 @@ int32_t App::start(int32_t width, int32_t height, const std::string& assetPath, 
             std::shared_ptr<ShaderProgram> newProgram =
                 std::make_shared<ShaderProgram>();
 
-            if (uiShaderPlatformIndex == SHADER_TOY) {
-                newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
-            }
+            setupShaderTemplate(newProgram);
 
             compileShaderFromFile(newProgram,
                                   program->getVertexShader().getPath(),
@@ -786,7 +792,8 @@ void App::getUsedTextures(
                 u.name != uNames.backbuffer) {
                 int32_t& uiImage = imageUniformNameToIndex[u.name];
 
-                if (uiImage < 0 || uiImage >= shaderFiles.getNumImageFileNames()) {
+                if (uiImage < 0 ||
+                    uiImage >= shaderFiles.getNumImageFileNames()) {
                     uiImage = 0;
                 }
 
@@ -812,10 +819,10 @@ void App::onUiCaptureWindow() {
     ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
                  IM_ARRAYSIZE(resolutionItems));
 
-    ImGui::Combo("format", &uiVideoTypeIndex, typeItems,
+    ImGui::Combo("format", (int32_t*)&uiVideoTypeIndex, typeItems,
                  IM_ARRAYSIZE(typeItems) - (h264enabled ? 0 : 1));
 
-    if (uiVideoTypeIndex == 1) {
+    if (uiVideoTypeIndex == AppVideoType::WebM) {
         const char* qualityItems[] = {"fast", "good", "best"};
 
         ImGui::Combo("quality", &uiVideoQualityIndex, qualityItems,
@@ -856,17 +863,17 @@ void App::onUiCaptureWindow() {
 
     if (ImGui::Button("Export")) {
         switch (uiVideoTypeIndex) {
-            case 0: {
+            case AppVideoType::I420: {
                 fileName = "video.y4m";
                 filter = y4mFilter;
                 ext = y4mExt;
             } break;
-            case 1: {
+            case AppVideoType::WebM: {
                 fileName = "video.webm";
                 filter = webmFilter;
                 ext = webmExt;
             } break;
-            case 2: {
+            case AppVideoType::H264: {
                 fileName = "video.mp4";
                 filter = mp4Filter;
                 ext = mp4Ext;
@@ -879,9 +886,8 @@ void App::onUiCaptureWindow() {
         ok = true;
 #endif
         if (ok) {
-            startRecord(fileName, uiVideoTypeIndex, uiVideoResolutionIndex,
-                        static_cast<int32_t>(uiVideoMbps * 1000.0f),
-                        encodeDeadline, uiTimeValue);
+            startRecord(fileName, static_cast<int32_t>(uiVideoMbps * 1000.0f),
+                        encodeDeadline);
             ImGui::OpenPopup("Export Progress");
         }
     }
@@ -1028,11 +1034,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
         std::shared_ptr<ShaderProgram> newProgram =
             std::make_shared<ShaderProgram>();
 
-        if (uiShaderPlatformIndex == SHADER_TOY) {
-            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
-        } else {
-            newProgram->setFragmentShaderSourceTemplate(std::string());
-        }
+        setupShaderTemplate(newProgram);
 
         recompileFragmentShader(program, newProgram, editor.GetText());
         programErrors = newProgram->getFragmentShader().getErrors();
@@ -1048,15 +1050,12 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
         needRecompile = false;
     }
 
-    if (ImGui::Combo("File", &uiShaderFileIndex, shaderFiles.getShaderFileNames(),
+    if (ImGui::Combo("File", &uiShaderFileIndex,
+                     shaderFiles.getShaderFileNames(),
                      shaderFiles.getNumShaderFileNames())) {
         auto newProgram = shaderFiles.getShaderFile(uiShaderFileIndex);
 
-        if (uiShaderPlatformIndex == SHADER_TOY) {
-            newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
-        } else {
-            newProgram->setFragmentShaderSourceTemplate(std::string());
-        }
+        setupShaderTemplate(newProgram);
 
         newProgram->compile();
 
@@ -1080,8 +1079,8 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
     ImGui::Checkbox("TextEditor", &uiShowTextEditor);
 
     if (uiShowTextEditor) {
-        ShowTextEditor(uiShowTextEditor, uiShaderFileIndex,
-                       uiShaderPlatformIndex);
+        onTextEditor();
+
         if (cursorLine >= 0) {
             editor.SetCursorPosition(TextEditor::Coordinates(cursorLine, 0));
             cursorLine = -1;
@@ -1096,9 +1095,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
             std::shared_ptr<ShaderProgram> newProgram =
                 std::make_shared<ShaderProgram>();
 
-            if (uiShaderPlatformIndex == SHADER_TOY) {
-                newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
-            }
+            setupShaderTemplate(newProgram);
 
             compileShaderFromFile(newProgram,
                                   program->getVertexShader().getPath(), path);

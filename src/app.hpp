@@ -25,12 +25,16 @@ struct UniformNames {
 typedef enum {
     GLSL_SANDBOX = 0,
     SHADER_TOY = 1,
-} ShaderPlatform;
+} AppShaderPlatform;
+
+typedef enum {
+    I420 = 0,
+    WebM = 1,
+    H264 = 2,
+} AppVideoType;
 
 class App {
    private:
-    static UniformNames getUniformNames(ShaderPlatform platform);
-
 #ifndef NDEBUG
     bool showImGuiDemoWindow = false;
 #endif
@@ -49,11 +53,11 @@ class App {
     float uiTimeValue = 0;
     bool uiPlaying = true;
 
-    ShaderPlatform uiShaderPlatformIndex = GLSL_SANDBOX;
+    AppShaderPlatform uiShaderPlatformIndex = GLSL_SANDBOX;
+    AppVideoType uiVideoTypeIndex = AppVideoType::I420;
     int32_t uiShaderFileIndex = 0;
     int32_t uiBufferQualityIndex = 2;
     int32_t uiVideoResolutionIndex = 2;
-    int32_t uiVideoTypeIndex = 0;
     int32_t uiVideoQualityIndex = 1;
     float uiVideoMbps = 1.0f;
     float uiVideoTime = 5.0f;
@@ -89,31 +93,30 @@ class App {
     std::unique_ptr<Recording> recording = std::make_unique<Recording>();
     bool h264enabled = false;
 
-    void startRecord(const std::string& fileName,
-                     const int32_t uiVideoTypeIndex,
-                     const int32_t uiVideoResolution, const int32_t kbps,
-                     unsigned long encodeDeadline, float& uiTimeValue);
+    void startRecord(const std::string& fileName, const int32_t kbps,
+                     unsigned long encodeDeadline);
 
     void SetProgramErrors(const std::vector<CompileError>& programErrors,
                           std::shared_ptr<ShaderProgram> program);
 
     void swapProgram(std::shared_ptr<ShaderProgram> newProgram);
-    void ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
-                             int32_t uiPlatform);
 
-   public:
-    GLFWwindow* getMainWindow();
-
-    int32_t start(int32_t width, int32_t height, const std::string& asetPath, bool alwaysOnTop);
-    void update(void*);
     void getUsedTextures(
         const UniformNames& uNames,
         std::map<std::string, std::shared_ptr<Image>>& usedTextures);
-    void cleanup();
 
-    std::shared_ptr<ShaderProgram> refreshShaderProgram(float now, int32_t &cursorLine);
+    UniformNames getCurrentUniformNames();
+
+    void setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram);
+    void applyShaderUniform(const UniformNames& uNames,
+                            const bool* const mouseDown,
+                            const ImVec2& mousePos);
+
+    std::shared_ptr<ShaderProgram> refreshShaderProgram(float now,
+                                                        int32_t& cursorLine);
 
     void onUiCaptureWindow();
+    void onTextEditor();
     void onUiStatsWindow();
     void onUiErrorWindow();
     void onUiTimeWindow(float now);
@@ -124,5 +127,13 @@ class App {
         std::map<std::string, std::shared_ptr<Image>>& usedTextures);
 
     void onUiShaderFileWindow(int32_t& cursorLine);
+
+   public:
+    GLFWwindow* getMainWindow();
+
+    int32_t start(int32_t width, int32_t height, const std::string& asetPath,
+                  bool alwaysOnTop);
+    void update(void*);
+    void cleanup();
 };
 }  // namespace shader_editor
