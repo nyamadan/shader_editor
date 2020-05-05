@@ -26,19 +26,17 @@ EMSCRIPTEN_BINDINGS(clipboard_module) {
 
 void SetClipboardTextImpl(void*, const char* text) {
 #ifdef __EMSCRIPTEN__
-    EM_ASM(
-        {
-            const copy = document.createElement("textarea");
-            document.body.appendChild(copy);
-            copy.style.position = "absolute";
-            copy.textContent = UTF8ToString($0);
-            copy.focus();
-            copy.select();
-            document.execCommand("copy");
-            document.body.removeChild(copy);
-            Module.canvas.focus();
-        },
-        text);
+    EM_ASM({
+        const copy = document.createElement("textarea");
+        document.body.appendChild(copy);
+        copy.style.position = "absolute";
+        copy.textContent = UTF8ToString($0);
+        copy.focus();
+        copy.select();
+        document.execCommand("copy");
+        document.body.removeChild(copy);
+        Module.canvas.focus();
+    }, text);
 #endif
 
     SetClipboardText(text);
@@ -115,6 +113,18 @@ int main(const int argc, const char** const argv) {
 #ifdef __EMSCRIPTEN__
     ImGui::GetIO().SetClipboardTextFn = SetClipboardTextImpl;
     ImGui::GetIO().GetClipboardTextFn = GetClipboardTextImpl;
+
+    EM_ASM({
+        document.body.addEventListener("paste", (event) => {
+            if (event.target !== document.body) {
+                return;
+            }
+
+            const text = (event.clipboardData || window.clipboardData).getData("text");
+            Module.SetClipboardText(text);
+            event.preventDefault();
+        }, false);
+    });
 #endif
 
 #ifndef __EMSCRIPTEN__
