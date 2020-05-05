@@ -59,7 +59,11 @@ int main(const int argc, const char** const argv) {
                         {'h', "help"});
     args::Flag top(parser, "top", "always on top", {'t', "top"}, false);
 
-    args::ValueFlag<std::string> log(parser, "log", "loglevel(debug, info, error)", {'l', "log"});
+    args::ValueFlag<std::string> log(parser, "log", "loglevel(detail, debug, info, error)", {'l', "log"});
+
+    args::ValueFlag<int32_t> width(parser, "width", "window width", {"width"}, 1024);
+
+    args::ValueFlag<int32_t> height(parser, "height", "window height", {"height"}, 768);
 
     args::Positional<std::string> assetPath(parser, "asset path",
                                             "path to asset", ".");
@@ -80,6 +84,19 @@ int main(const int argc, const char** const argv) {
         return 1;
     }
 
+    if(width.Get() <= 0) {
+        std::cerr << "width must be greater than 0." << std::endl << std::endl << parser;
+        return 1;
+    }
+
+    if(height.Get() <= 0) {
+        std::cerr << "height must be greater than 0." << std::endl << std::endl << parser;
+        return 1;
+    }
+
+    if (log.Get().compare("detail") == 0) {
+        AppLog::getInstance().setLogLevel(AppLogLevel::Detail);
+    }
     if (log.Get().compare("debug") == 0) {
         AppLog::getInstance().setLogLevel(AppLogLevel::Debug);
     }
@@ -90,7 +107,7 @@ int main(const int argc, const char** const argv) {
         AppLog::getInstance().setLogLevel(AppLogLevel::Error);
     }
 
-    app.start(assetPath.Get(), top.Get());
+    app.start(width.Get(), height.Get(), assetPath.Get(), top.Get());
 
 #ifdef __EMSCRIPTEN__
     ImGui::GetIO().SetClipboardTextFn = SetClipboardTextImpl;

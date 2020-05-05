@@ -33,6 +33,17 @@ void AppLog::addLog(va_list args, const char* fmt) {
     scrolltoBottom = true;
 }
 
+void AppLog::detail(const char* fmt, ...) {
+    if(logLevel > AppLogLevel::Detail) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    addLog(args, fmt);
+    va_end(args);
+}
+
 void AppLog::debug(const char* fmt, ...) {
     if(logLevel > AppLogLevel::Debug) {
         return;

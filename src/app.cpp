@@ -40,7 +40,7 @@ void glDebugOutput(GLenum source, GLenum type, GLuint eid, GLenum severity,
                    const void* user_param) {
     switch (severity) {
         case GL_DEBUG_SEVERITY_NOTIFICATION:
-            AppLog::getInstance().debug("GL_DEBUG_SEVERITY_DEBUG(%X): %s\n", eid,
+            AppLog::getInstance().detail("GL_DEBUG_SEVERITY_DEBUG(%X): %s\n", eid,
                                         message);
             break;
         case GL_DEBUG_SEVERITY_LOW:
@@ -614,7 +614,10 @@ void App::ShowTextEditor(bool& showTextEditor, int32_t& uiShader,
     ImGui::End();
 }
 
-int32_t App::start(const std::string& assetPath, bool alwaysOnTop) {
+int32_t App::start(int32_t width, int32_t height, const std::string& assetPath, bool alwaysOnTop) {
+    this->windowWidth = width;
+    this->windowHeight = height;
+
 #if defined(_MSC_VER) || defined(__MINGW32__)
     h264enabled = h264encoder::LoadEncoderLibrary();
 #endif

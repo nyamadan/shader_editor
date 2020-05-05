@@ -61,8 +61,8 @@ class App {
     std::map<std::string, int32_t> imageUniformNameToIndex;
     std::vector<CompileError> programErrors;
 
-    int32_t windowWidth = 1024;
-    int32_t windowHeight = 768;
+    int32_t windowWidth;
+    int32_t windowHeight;
 
     GLFWwindow* mainWindow = nullptr;
 
@@ -104,7 +104,7 @@ class App {
    public:
     GLFWwindow* getMainWindow();
 
-    int32_t start(const std::string& asetPath, bool alwaysOnTop);
+    int32_t start(int32_t width, int32_t height, const std::string& asetPath, bool alwaysOnTop);
     void update(void*);
     void getUsedTextures(
         const UniformNames& uNames,

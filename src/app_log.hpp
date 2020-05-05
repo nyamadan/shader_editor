@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 typedef enum {
+    Detail,
     Debug,
     Info,
     Error,
@@ -30,6 +31,8 @@ class AppLog {
     AppLogLevel getLogLevel();
 
     void clear();
+
+    void detail(const char* fmt, ...);
 
     void debug(const char* fmt, ...);
 
