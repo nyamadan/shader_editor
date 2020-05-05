@@ -837,13 +837,11 @@ void App::onUiCaptureWindow() {
                                      "720x480",   "1280x720", "1920x1080",
                                      "2560x1440", "3840x2160"};
 
-    const char* typeItems[] = {"I420", "WebM", "MP4"};
-
     ImGui::Combo("resolution", &uiVideoResolutionIndex, resolutionItems,
                  IM_ARRAYSIZE(resolutionItems));
 
-    ImGui::Combo("format", (int32_t*)&uiVideoTypeIndex, typeItems,
-                 IM_ARRAYSIZE(typeItems) - (h264enabled ? 0 : 1));
+    ImGui::Combo("format", (int32_t*)&uiVideoTypeIndex, VideoTypeNames,
+                 IM_ARRAYSIZE(VideoTypeNames) - (h264enabled ? 0 : 1));
 
     if (uiVideoTypeIndex == AppVideoType::WebM) {
         const char* qualityItems[] = {"fast", "good", "best"};

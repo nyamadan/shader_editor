@@ -42,6 +42,12 @@ typedef enum {
     H264 = 2,
 } AppVideoType;
 
+const char* const VideoTypeNames[] = {
+    "I420",
+    "WebM",
+    "MP4",
+};
+
 class App {
    private:
 #ifndef NDEBUG
