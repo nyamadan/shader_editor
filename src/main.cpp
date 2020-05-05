@@ -16,10 +16,7 @@ shader_editor::App app;
 
 static auto clipboardText = std::string("");
 
-void SetClipboardText(const std::string &text)
-{
-    clipboardText = text;
-}
+void SetClipboardText(const std::string& text) { clipboardText = text; }
 
 #ifdef __EMSCRIPTEN__
 EMSCRIPTEN_BINDINGS(clipboard_module) {
@@ -27,28 +24,27 @@ EMSCRIPTEN_BINDINGS(clipboard_module) {
 }
 #endif
 
-
-void SetClipboardTextImpl(void *, const char *text) {
+void SetClipboardTextImpl(void*, const char* text) {
 #ifdef __EMSCRIPTEN__
-EM_ASM({
-    const copy = document.createElement("textarea");
-    document.body.appendChild(copy);
-    copy.style.position = "absolute";
-    copy.textContent = UTF8ToString($0);
-    copy.focus();
-    copy.select();
-    document.execCommand("copy");
-    document.body.removeChild(copy);
-    Module.canvas.focus();
-}, text);
+    EM_ASM(
+        {
+            const copy = document.createElement("textarea");
+            document.body.appendChild(copy);
+            copy.style.position = "absolute";
+            copy.textContent = UTF8ToString($0);
+            copy.focus();
+            copy.select();
+            document.execCommand("copy");
+            document.body.removeChild(copy);
+            Module.canvas.focus();
+        },
+        text);
 #endif
 
     SetClipboardText(text);
 }
 
-const char* GetClipboardTextImpl(void *) {
-    return clipboardText.c_str();
-}
+const char* GetClipboardTextImpl(void*) { return clipboardText.c_str(); }
 
 void update(void*) { app.update(nullptr); }
 }  // namespace
@@ -59,11 +55,14 @@ int main(const int argc, const char** const argv) {
                         {'h', "help"});
     args::Flag top(parser, "top", "always on top", {'t', "top"}, false);
 
-    args::ValueFlag<std::string> log(parser, "log", "loglevel(detail, debug, info, error)", {'l', "log"});
+    args::ValueFlag<std::string> log(
+        parser, "log", "loglevel(detail, debug, info, error)", {'l', "log"});
 
-    args::ValueFlag<int32_t> width(parser, "width", "window width", {"width"}, 1024);
+    args::ValueFlag<int32_t> width(parser, "width", "window width", {"width"},
+                                   1024);
 
-    args::ValueFlag<int32_t> height(parser, "height", "window height", {"height"}, 768);
+    args::ValueFlag<int32_t> height(parser, "height", "window height",
+                                    {"height"}, 768);
 
     args::Positional<std::string> assetPath(parser, "asset path",
                                             "path to asset", ".");
@@ -84,13 +83,17 @@ int main(const int argc, const char** const argv) {
         return 1;
     }
 
-    if(width.Get() <= 0) {
-        std::cerr << "width must be greater than 0." << std::endl << std::endl << parser;
+    if (width.Get() <= 0) {
+        std::cerr << "width must be greater than 0." << std::endl
+                  << std::endl
+                  << parser;
         return 1;
     }
 
-    if(height.Get() <= 0) {
-        std::cerr << "height must be greater than 0." << std::endl << std::endl << parser;
+    if (height.Get() <= 0) {
+        std::cerr << "height must be greater than 0." << std::endl
+                  << std::endl
+                  << parser;
         return 1;
     }
 
