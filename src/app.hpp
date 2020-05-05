@@ -24,8 +24,17 @@ struct UniformNames {
 
 typedef enum {
     GLSL_SANDBOX = 0,
-    SHADER_TOY = 1,
+    GLSL_DEFAULT = 1,
+    GLSL_CANVAS = 2,
+    SHADER_TOY = 3,
 } AppShaderPlatform;
+
+const char* const AppShaderPlatformNames[] = {
+    "default",
+    "glsl-sandbox",
+    "glsl-canvas",
+    "shadertoy",
+};
 
 typedef enum {
     I420 = 0,
@@ -108,9 +117,9 @@ class App {
     UniformNames getCurrentUniformNames();
 
     void setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram);
-    void applyShaderUniform(const UniformNames& uNames,
-                            const bool* const mouseDown,
-                            const ImVec2& mousePos);
+    void setupPlatformUniform(const UniformNames& uNames,
+                              const bool* const mouseDown,
+                              const ImVec2& mousePos);
 
     std::shared_ptr<ShaderProgram> refreshShaderProgram(float now,
                                                         int32_t& cursorLine);

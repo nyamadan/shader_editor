@@ -76,6 +76,23 @@ namespace shader_editor {
 UniformNames App::getCurrentUniformNames() {
     UniformNames uNames;
     switch (uiShaderPlatformIndex) {
+        case GLSL_SANDBOX:
+        {
+            uNames.time = "time";
+            uNames.resolution = "resolution";
+            uNames.mouse = "mouse";
+            uNames.backbuffer = "backbuffer";
+            uNames.frame = "";
+        } break;
+
+        case GLSL_CANVAS: {
+            uNames.time = "u_time";
+            uNames.resolution = "u_resolution";
+            uNames.mouse = "u_mouse";
+            uNames.backbuffer = "u_buffer0";
+            uNames.frame = "";
+        } break;
+
         case SHADER_TOY: {
             uNames.time = "iTime";
             uNames.resolution = "iResolution";
@@ -84,39 +101,23 @@ UniformNames App::getCurrentUniformNames() {
             uNames.backbuffer = "";
         } break;
 
-        case GLSL_SANDBOX:
+        case GLSL_DEFAULT:
         default: {
             uNames.time = "time";
             uNames.resolution = "resolution";
             uNames.mouse = "mouse";
             uNames.backbuffer = "backbuffer";
-            uNames.frame = "";
-
+            uNames.frame = "frame";
         } break;
     }
 
     return uNames;
 }
 
-void App::applyShaderUniform(const UniformNames& uNames,
-                             const bool* const mouseDown,
-                             const ImVec2& mousePos) {
-    // uniform values
-    program->setUniformValue(
-        uNames.resolution,
-        glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
-                  static_cast<GLfloat>(buffers.getHeight())));
-
+void App::setupPlatformUniform(const UniformNames& uNames,
+                               const bool* const mouseDown,
+                               const ImVec2& mousePos) {
     switch (uiShaderPlatformIndex) {
-        case GLSL_SANDBOX: {
-            if (recording->getIsRecording()) {
-                program->setUniformValue(uNames.mouse, glm::vec2(0.5f, 0.5f));
-            } else {
-                program->setUniformValue(
-                    uNames.mouse, glm::vec2(mousePos.x / windowWidth,
-                                            1.0f - mousePos.y / windowHeight));
-            }
-        } break;
         case SHADER_TOY: {
             program->setUniformValue(uNames.frame,
                                      static_cast<int>(currentFrame));
@@ -143,9 +144,20 @@ void App::applyShaderUniform(const UniformNames& uNames,
                 }
             }
         } break;
-    }
 
-    program->setUniformValue(uNames.time, uiTimeValue);
+        case GLSL_SANDBOX:
+        case GLSL_CANVAS:
+        case GLSL_DEFAULT:
+        default: {
+            if (recording->getIsRecording()) {
+                program->setUniformValue(uNames.mouse, glm::vec2(0.5f, 0.5f));
+            } else {
+                program->setUniformValue(
+                    uNames.mouse, glm::vec2(mousePos.x / windowWidth,
+                                            1.0f - mousePos.y / windowHeight));
+            }
+        } break;
+    }
 }
 
 void App::setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram) {
@@ -155,6 +167,8 @@ void App::setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram) {
         } break;
 
         case GLSL_SANDBOX:
+        case GLSL_CANVAS:
+        case GLSL_DEFAULT:
         default: {
             newProgram->setFragmentShaderSourceTemplate(std::string());
         } break;
@@ -347,7 +361,16 @@ void App::update(void*) {
     glViewport(0, 0, buffers.getWidth(), buffers.getHeight());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    applyShaderUniform(uNames, mouseDown, mousePos);
+    // uniform values
+
+    setupPlatformUniform(uNames, mouseDown, mousePos);
+
+    program->setUniformValue(
+        uNames.resolution,
+        glm::vec2(static_cast<GLfloat>(buffers.getWidth()),
+                  static_cast<GLfloat>(buffers.getHeight())));
+
+    program->setUniformValue(uNames.time, uiTimeValue);
 
     if (program->isOK()) {
         glUseProgram(program->getProgram());
@@ -1028,9 +1051,9 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
     ImGui::Begin("File", &uiShaderFileWindow,
                  ImGuiWindowFlags_AlwaysAutoResize);
 
-    const char* const items[] = {"glslsandbox", "shadertoy"};
-    if (ImGui::Combo("platform", (int*)&uiShaderPlatformIndex, items,
-                     IM_ARRAYSIZE(items))) {
+    if (ImGui::Combo("platform", (int32_t*)&uiShaderPlatformIndex,
+                     AppShaderPlatformNames,
+                     IM_ARRAYSIZE(AppShaderPlatformNames))) {
         std::shared_ptr<ShaderProgram> newProgram =
             std::make_shared<ShaderProgram>();
 
