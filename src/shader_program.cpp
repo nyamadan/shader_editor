@@ -12,15 +12,15 @@
 #include "../glslang/glslang/MachineIndependent/Scan.h"
 namespace {
 #ifdef __EMSCRIPTEN__
-    const int32_t VertexShaderVersion = 100;
-    const int32_t FragmentShaderVersion = 100;
-    const bool IsGlslEs = true;
+const int32_t VertexShaderVersion = 100;
+const int32_t FragmentShaderVersion = 100;
+const bool IsGlslEs = true;
 #else
-    const int32_t VertexShaderVersion = 420;
-    const int32_t FragmentShaderVersion = 420;
-    const bool IsGlslEs = false;
+const int32_t VertexShaderVersion = 420;
+const int32_t FragmentShaderVersion = 420;
+const bool IsGlslEs = false;
 #endif
-}
+}  // namespace
 
 namespace shader_editor {
 bool Shader::scanVersion(const std::string &shaderSource, int &version,
@@ -57,8 +57,7 @@ bool Shader::parseProgramError(const std::string &line) {
         const auto errorType = m[1];
         const std::string message = m[2].str();
 
-        errors.push_back(
-            CompileError(line, errorType, "", -1, message));
+        errors.push_back(CompileError(line, errorType, "", -1, message));
         return false;
     }
 
@@ -265,7 +264,7 @@ bool Shader::checkExpired() const {
     auto expired = false;
     expired |= getMTime(this->path) != this->mTime;
 
-    for(auto it = dependencies.cbegin(); it != dependencies.cend(); it++) {
+    for (auto it = dependencies.cbegin(); it != dependencies.cend(); it++) {
         expired |= (*it)->checkExpired();
     }
 
@@ -279,7 +278,7 @@ bool Shader::checkExpiredWithReset() {
     expired |= mTime != this->mTime;
     this->mTime = mTime;
 
-    for(auto it = dependencies.begin(); it != dependencies.end(); it++) {
+    for (auto it = dependencies.begin(); it != dependencies.end(); it++) {
         expired |= (*it)->checkExpiredWithReset();
     }
 
@@ -516,7 +515,7 @@ GLuint ShaderProgram::compile() {
         program = 0;
     }
 
-    AppLog::getInstance().info("(%s, %s): compling started\n",
+    AppLog::getInstance().info("(%s, %s): Shader compilation started\n",
                                vertexShader.getPath().c_str(),
                                fragmentShader.getPath().c_str());
 
@@ -528,7 +527,8 @@ GLuint ShaderProgram::compile() {
             AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());
         }
 
-        AppLog::getInstance().error("(%s) Shader compilation failed\n", vertexShader.getPath().c_str());
+        AppLog::getInstance().error("(%s): Shader compilation failed\n",
+                                    vertexShader.getPath().c_str());
         return 0;
     }
 
@@ -538,7 +538,7 @@ GLuint ShaderProgram::compile() {
             AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());
         }
 
-        AppLog::getInstance().error("(%s) Shader compilation failed\n",
+        AppLog::getInstance().error("(%s): Shader compilation failed\n",
                                     fragmentShader.getPath().c_str());
         return 0;
     }
@@ -546,9 +546,9 @@ GLuint ShaderProgram::compile() {
     link();
 
     if (!checkLinked(program, error)) {
-        AppLog::getInstance().error("Program linking failed:%s\n", error.c_str());
-        AppLog::getInstance().error("(%s, %s): Shader compilation failed\n",
-                                    vertexShader.getPath().c_str(),
+        AppLog::getInstance().error("Program linking failed:%s\n",
+                                    error.c_str());
+        AppLog::getInstance().error("(%s): Shader compilation failed\n",
                                     fragmentShader.getPath().c_str());
         return 0;
     }
