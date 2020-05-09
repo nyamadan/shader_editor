@@ -2,7 +2,8 @@
   "cmake.generator": "Ninja",
   "cmake.buildArgs": [
     "-w",
-    "dupbuild=warn"
+    "dupbuild=warn",
+    "-j8"
   ],
   "cmake.debugConfig": {
     "args": ["-ldebug", "./assets"]

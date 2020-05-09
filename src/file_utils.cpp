@@ -7,11 +7,19 @@
 #include <algorithm>
 #include <memory>
 
-#ifndef _MSC_VER
+#if defined(_MSC_VER) | defined(__MINGW32__)
+#include <io.h>
+#define open _open
+#define fdopen _fdopen
+#else
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#endif
+
+#ifndef O_BINARY
+#define O_BINARY 0x0000
 #endif
 
 std::vector<std::string> openDir(std::string path) {
@@ -27,9 +35,9 @@ std::vector<std::string> openDir(std::string path) {
     }
 #endif
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(__MINGW32__)
     HANDLE hFind;
-    WIN32_FIND_DATA win32fd;
+    WIN32_FIND_DATAA win32fd;
 
     const std::string fileName = path + "*.*";
     hFind = FindFirstFileA(fileName.c_str(), &win32fd);
