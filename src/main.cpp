@@ -26,6 +26,7 @@ EMSCRIPTEN_BINDINGS(clipboard_module) {
 
 void SetClipboardTextImpl(void*, const char* text) {
 #ifdef __EMSCRIPTEN__
+    // clang-format off
     EM_ASM({
         const copy = document.createElement("textarea");
         document.body.appendChild(copy);
@@ -37,6 +38,7 @@ void SetClipboardTextImpl(void*, const char* text) {
         document.body.removeChild(copy);
         Module.canvas.focus();
     }, text);
+    // clang-format on
 #endif
 
     SetClipboardText(text);
@@ -114,6 +116,7 @@ int main(const int argc, const char** const argv) {
     ImGui::GetIO().SetClipboardTextFn = SetClipboardTextImpl;
     ImGui::GetIO().GetClipboardTextFn = GetClipboardTextImpl;
 
+    // clang-format off
     EM_ASM({
         document.body.addEventListener("paste", (event) => {
             if (event.target !== document.body) {
@@ -125,6 +128,7 @@ int main(const int argc, const char** const argv) {
             event.preventDefault();
         }, false);
     });
+    // clang-format on
 #endif
 
 #ifndef __EMSCRIPTEN__
