@@ -14,18 +14,16 @@ using namespace emscripten;
 namespace {
 shader_editor::App app;
 
-static auto clipboardText = std::string("");
+#ifdef __EMSCRIPTEN__
+static auto clipboardText = std::string();
 
 void SetClipboardText(const std::string& text) { clipboardText = text; }
 
-#ifdef __EMSCRIPTEN__
 EMSCRIPTEN_BINDINGS(clipboard_module) {
     function("SetClipboardText", &SetClipboardText);
 }
-#endif
 
 void SetClipboardTextImpl(void*, const char* text) {
-#ifdef __EMSCRIPTEN__
     // clang-format off
     EM_ASM({
         const copy = document.createElement("textarea");
@@ -39,12 +37,12 @@ void SetClipboardTextImpl(void*, const char* text) {
         Module.canvas.focus();
     }, text);
     // clang-format on
-#endif
 
     SetClipboardText(text);
 }
 
 const char* GetClipboardTextImpl(void*) { return clipboardText.c_str(); }
+#endif
 
 void update(void*) { app.update(nullptr); }
 }  // namespace
