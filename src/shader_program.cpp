@@ -12,12 +12,10 @@
 #include "../glslang/glslang/MachineIndependent/Scan.h"
 namespace {
 #ifdef __EMSCRIPTEN__
-const int32_t VertexShaderVersion = 100;
-const int32_t FragmentShaderVersion = 100;
+const int32_t TargetShaderVersion = 100;
 const bool IsGlslEs = true;
 #else
-const int32_t VertexShaderVersion = 420;
-const int32_t FragmentShaderVersion = 420;
+const int32_t TargetShaderVersion = 420;
 const bool IsGlslEs = false;
 #endif
 }  // namespace
@@ -103,22 +101,20 @@ void Shader::setCompileInfo(const std::string &path, GLuint type,
     this->source = source;
 }
 
-bool Shader::compile() {
+bool Shader::compile(int32_t targetVersion, bool isGlslEs) {
     if (shader != 0) {
         glDeleteShader(shader);
         shader = 0;
     }
 
-    std::string combinedSource;
-
-    if (!preCompile(combinedSource)) {
+    if (!preCompile(TargetShaderVersion, IsGlslEs, compiledSource)) {
         return false;
     }
 
     shader = glCreateShader(type);
-    const char *const pCombinedSource = combinedSource.c_str();
+    const char *const pCompiledSource = compiledSource.c_str();
 
-    glShaderSource(shader, 1, &pCombinedSource, NULL);
+    glShaderSource(shader, 1, &pCompiledSource, NULL);
     glCompileShader(shader);
 
     std::string error;
@@ -133,12 +129,6 @@ bool Shader::compile() {
     ok = true;
 
     return true;
-}
-
-bool Shader::compile(const std::string &path, GLuint type,
-                     const std::string &source, int64_t mTime) {
-    this->setCompileInfo(path, type, source, mTime);
-    return this->compile();
 }
 
 bool Shader::getCompilable()
@@ -166,7 +156,7 @@ bool Shader::getCompilable()
     }
 }
 
-bool Shader::preCompile(std::string &combinedSource) {
+bool Shader::preCompile(int32_t version, bool isGlslEs, std::string &compiledShaderSource) {
     bool isLinked = false;
     std::string error;
 
@@ -174,14 +164,14 @@ bool Shader::preCompile(std::string &combinedSource) {
         shader_compiler::CompileResult compileResult;
         switch (type) {
             case GL_VERTEX_SHADER: {
-                shader_compiler::compile(EShLangVertex, VertexShaderVersion,
-                                         IsGlslEs, path, source, sourceTemplate,
+                shader_compiler::compile(EShLangVertex, version,
+                                         isGlslEs, path, source, sourceTemplate,
                                          compileResult);
             } break;
 
             case GL_FRAGMENT_SHADER: {
-                shader_compiler::compile(EShLangFragment, FragmentShaderVersion,
-                                         IsGlslEs, path, source, sourceTemplate,
+                shader_compiler::compile(EShLangFragment, version,
+                                         isGlslEs, path, source, sourceTemplate,
                                          compileResult);
             } break;
         }
@@ -204,7 +194,7 @@ bool Shader::preCompile(std::string &combinedSource) {
         }
 
         if (isLinked) {
-            combinedSource = compileResult.sourceCode;
+            compiledShaderSource = compileResult.sourceCode;
         }
     } else {
         shader_compiler::ValidateResult validationResult;
@@ -226,7 +216,7 @@ bool Shader::preCompile(std::string &combinedSource) {
         dependencies.clear();
 
         if (isLinked) {
-            combinedSource = source;
+            compiledShaderSource = source;
         }
     }
 
@@ -500,7 +490,7 @@ GLuint ShaderProgram::compile() {
 
     double t0 = glfwGetTime();
 
-    if (!vertexShader.compile()) {
+    if (!vertexShader.compile(TargetShaderVersion, IsGlslEs)) {
         const auto &errors = vertexShader.getErrors();
         for (auto iter = errors.begin(); errors.end() != iter; iter++) {
             AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());
@@ -511,7 +501,7 @@ GLuint ShaderProgram::compile() {
         return 0;
     }
 
-    if (!fragmentShader.compile()) {
+    if (!fragmentShader.compile(TargetShaderVersion, IsGlslEs)) {
         const auto &errors = fragmentShader.getErrors();
         for (auto iter = errors.begin(); errors.end() != iter; iter++) {
             AppLog::getInstance().error("%s\n", iter->getOriginal().c_str());

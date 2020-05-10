@@ -44,13 +44,14 @@ class Shader {
     std::string path = "";
     std::string source = "";
     std::string sourceTemplate = "";
+    std::string compiledSource = "";
     std::vector<std::shared_ptr<Shader>> dependencies;
     std::vector<CompileError> errors;
     bool ok = false;
     int64_t mTime = 0;
 
+    bool preCompile(int32_t version, bool isGlslEs, std::string &combinedSource);
     void parseGlslangErrors(const std::string &error);
-    bool getCompilable();
     bool scanVersion(const std::string &source, int &version, EProfile &profile,
                      bool &notFirstToken);
     bool parseSharderError(const std::string &line);
@@ -64,6 +65,7 @@ class Shader {
     const std::string &getPath() const { return path; }
     const std::string &getSourceTemplate() const { return sourceTemplate; }
     bool isOK() const { return ok; }
+    bool getCompilable();
     GLuint getType() const { return type; }
     GLuint getShader() const { return shader; }
     void setSourceTemplate(const std::string &sourceTemplate);
@@ -73,10 +75,7 @@ class Shader {
 
     void setCompileInfo(const std::string &path, GLuint type,
                         const std::string &source, int64_t mTime);
-    bool preCompile(std::string &combinedSource);
-    bool compile();
-    bool compile(const std::string &path, GLuint type,
-                 const std::string &source, int64_t mTime);
+    bool compile(int32_t targetVersion, bool isGlslEs);
 };
 
 enum UniformType {
