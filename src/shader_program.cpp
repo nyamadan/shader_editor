@@ -135,6 +135,12 @@ bool Shader::compile() {
     return true;
 }
 
+bool Shader::compile(const std::string &path, GLuint type,
+                     const std::string &source, int64_t mTime) {
+    this->setCompileInfo(path, type, source, mTime);
+    return this->compile();
+}
+
 bool Shader::preCompile(std::string &combinedSource) {
     bool canCompile = false;
     bool useTemplate = !sourceTemplate.empty();
@@ -227,35 +233,6 @@ bool Shader::preCompile(std::string &combinedSource) {
         shader = 0;
         return false;
     }
-
-    return true;
-}
-
-bool Shader::compile(const std::string &path, GLuint type,
-                     const std::string &source, int64_t mTime) {
-    setCompileInfo(path, type, source, mTime);
-
-    std::string combinedSource;
-
-    if (!preCompile(combinedSource)) {
-        return false;
-    }
-
-    shader = glCreateShader(type);
-    const char *const pCombinedSource = combinedSource.c_str();
-    glShaderSource(shader, 1, &pCombinedSource, NULL);
-    glCompileShader(shader);
-
-    std::string error;
-    if (!checkCompiled(shader, error)) {
-        AppLog::getInstance().error(error.c_str());
-        shader = 0;
-        return false;
-    }
-
-    errors.clear();
-
-    ok = true;
 
     return true;
 }

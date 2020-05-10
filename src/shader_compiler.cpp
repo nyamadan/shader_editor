@@ -17,6 +17,7 @@
 
 namespace {
 const char *const TemplateFileName = "<template>";
+const int32_t DefaultGlslVersion = 100;
 
 static void setStringIfNotNull(std::string &str, const char *const p) {
     if (p && p[0]) {
@@ -38,14 +39,13 @@ class Includer : public DirStackFileIncluder {
           contentFileText(_contentFileText) {}
     virtual ~Includer() {}
 
-    virtual IncludeResult* includeLocal(const char* headerName,
-                                        const char* includerName,
-                                        size_t inclusionDepth) override
-    {
+    virtual IncludeResult *includeLocal(const char *headerName,
+                                        const char *includerName,
+                                        size_t inclusionDepth) override {
         const auto result =
             readLocalPath(headerName, includerName, (int)inclusionDepth);
-        
-        if(result != nullptr) {
+
+        if (result != nullptr) {
             dependencies.push_back(result->headerName);
         }
 
@@ -53,7 +53,7 @@ class Includer : public DirStackFileIncluder {
     }
 
     virtual IncludeResult *includeSystem(const char *headerName,
-                                         const char * includerName,
+                                         const char *includerName,
                                          size_t /*inclusionDepth*/) override {
         if (std::string(headerName).compare("content") == 0 &&
             std::string(includerName).compare(TemplateFileName) == 0) {
@@ -65,8 +65,7 @@ class Includer : public DirStackFileIncluder {
         return readSystemPath(headerName);
     }
 
-    virtual const std::vector<std::string>& getDependencies()
-    {
+    virtual const std::vector<std::string> &getDependencies() {
         return this->dependencies;
     }
 };
@@ -79,7 +78,6 @@ void validate(EShLanguage shaderStage, const std::string &sourceFileName,
     std::map<std::string, std::string> defines;
     bool isHlsl = false;
     bool enableDebugOutput = false;
-    bool es = false;
 
     EShMessages messages = EShMsgDefault;
     messages = (EShMessages)(messages | EShMsgCascadingErrors);
@@ -171,7 +169,7 @@ void validate(EShLanguage shaderStage, const std::string &sourceFileName,
     }
 
     isCompiled = shader->parse(&glslang::DefaultTBuiltInResource,
-                               es ? 100 : 110, false, messages);
+                               DefaultGlslVersion, false, messages);
 
     setStringIfNotNull(shaderLog, shader->getInfoLog());
     setStringIfNotNull(shaderDebugLog, shader->getInfoDebugLog());
@@ -201,7 +199,7 @@ void validate(EShLanguage shaderStage, const std::string &sourceFileName,
     result.shaderLog = shaderLog;
 }
 
-void compile(EShLanguage shaderStage, int32_t version, bool es,
+void compile(EShLanguage shaderStage, int32_t version, bool isGlslEs,
              const std::string &sourceFileName,
              const std::string &sourceFileText,
              const std::string &templateFileText, CompileResult &result) {
@@ -324,7 +322,7 @@ void compile(EShLanguage shaderStage, int32_t version, bool es,
 
     auto includer = Includer(sourceFileName, sourceFileText);
     isCompiled = shader->parse(&glslang::DefaultTBuiltInResource,
-                               es ? 100 : 110, false, messages, includer);
+                               DefaultGlslVersion, false, messages, includer);
     const auto &dependencies = includer.getDependencies();
 
     setStringIfNotNull(shaderLog, shader->getInfoLog());
@@ -389,7 +387,7 @@ void compile(EShLanguage shaderStage, int32_t version, bool es,
 
         spirv_cross::CompilerGLSL::Options options;
         options.version = version;
-        options.es = es;
+        options.es = isGlslEs;
 
         glsl.set_common_options(options);
 
