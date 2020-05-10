@@ -141,8 +141,8 @@ bool Shader::compile(const std::string &path, GLuint type,
     return this->compile();
 }
 
-bool Shader::preCompile(std::string &combinedSource) {
-    bool canCompile = false;
+bool Shader::getCompilable()
+{
     bool useTemplate = !sourceTemplate.empty();
 
     int version;
@@ -155,20 +155,22 @@ bool Shader::preCompile(std::string &combinedSource) {
         case ENoProfile:
         case ECoreProfile:
         case ECompatibilityProfile: {
-            canCompile = version >= 330;
+            return version >= 330;
         } break;
         case EEsProfile: {
-            canCompile = version >= 310;
+            return version >= 310;
         } break;
         default: {
-            canCompile = false;
+            return false;
         } break;
     }
+}
 
+bool Shader::preCompile(std::string &combinedSource) {
     bool isLinked = false;
     std::string error;
 
-    if (canCompile) {
+    if (getCompilable()) {
         shader_compiler::CompileResult compileResult;
         switch (type) {
             case GL_VERTEX_SHADER: {
@@ -208,13 +210,13 @@ bool Shader::preCompile(std::string &combinedSource) {
         shader_compiler::ValidateResult validationResult;
         switch (type) {
             case GL_VERTEX_SHADER: {
-                shader_compiler::validate(EShLangVertex, path, source,
+                shader_compiler::validate(EShLangVertex, IsGlslEs, path, source,
                                           validationResult);
             } break;
 
             case GL_FRAGMENT_SHADER: {
-                shader_compiler::validate(EShLangFragment, path, source,
-                                          validationResult);
+                shader_compiler::validate(EShLangFragment, IsGlslEs, path,
+                                          source, validationResult);
             } break;
         }
 

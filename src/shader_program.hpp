@@ -50,6 +50,7 @@ class Shader {
     int64_t mTime = 0;
 
     void parseGlslangErrors(const std::string &error);
+    bool getCompilable();
     bool scanVersion(const std::string &source, int &version, EProfile &profile,
                      bool &notFirstToken);
     bool parseSharderError(const std::string &line);

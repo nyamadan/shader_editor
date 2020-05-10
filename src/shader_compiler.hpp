@@ -25,10 +25,11 @@ struct ValidateResult {
     std::string programDebugLog = "";
 };
 
-void validate(EShLanguage shaderStage, const std::string &sourceFileName,
+void validate(EShLanguage shaderStage, bool isGlslEs,
+              const std::string &sourceFileName,
               const std::string &sourceFileText, ValidateResult &result);
 
-void compile(EShLanguage shadaerStage, int32_t version, bool es,
+void compile(EShLanguage shadaerStage, int32_t version, bool isGlslEs,
              const std::string &sourceFileName,
              const std::string &sourceFileText,
              const std::string &templateFileText, CompileResult &result);

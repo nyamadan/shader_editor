@@ -17,7 +17,6 @@
 
 namespace {
 const char *const TemplateFileName = "<template>";
-const int32_t DefaultGlslVersion = 100;
 
 static void setStringIfNotNull(std::string &str, const char *const p) {
     if (p && p[0]) {
@@ -72,7 +71,8 @@ class Includer : public DirStackFileIncluder {
 }  // namespace
 
 namespace shader_compiler {
-void validate(EShLanguage shaderStage, const std::string &sourceFileName,
+void validate(EShLanguage shaderStage, bool isGlslEs,
+              const std::string &sourceFileName,
               const std::string &sourceFileText, ValidateResult &result) {
     std::string entryPoint = "main";
     std::map<std::string, std::string> defines;
@@ -169,7 +169,7 @@ void validate(EShLanguage shaderStage, const std::string &sourceFileName,
     }
 
     isCompiled = shader->parse(&glslang::DefaultTBuiltInResource,
-                               DefaultGlslVersion, false, messages);
+                               isGlslEs ? 100 : 110, false, messages);
 
     setStringIfNotNull(shaderLog, shader->getInfoLog());
     setStringIfNotNull(shaderDebugLog, shader->getInfoDebugLog());
@@ -322,7 +322,7 @@ void compile(EShLanguage shaderStage, int32_t version, bool isGlslEs,
 
     auto includer = Includer(sourceFileName, sourceFileText);
     isCompiled = shader->parse(&glslang::DefaultTBuiltInResource,
-                               DefaultGlslVersion, false, messages, includer);
+                               isGlslEs ? 100 : 110, false, messages, includer);
     const auto &dependencies = includer.getDependencies();
 
     setStringIfNotNull(shaderLog, shader->getInfoLog());
