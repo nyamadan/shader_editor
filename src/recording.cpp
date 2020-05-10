@@ -54,7 +54,14 @@ void Recording::update(bool isLastFrame, int64_t currentFrame,
         {
             auto size = bufferWidth * bufferHeight * 4;
             auto ptr = std::make_unique<uint8_t[]>(size);
-            EM_ASM({ Module.ctx.getBufferSubData(Module.ctx.PIXEL_PACK_BUFFER, 0, HEAPU8.subarray($0, $0 + $1)); }, ptr.get(), size);
+            // clang-format on
+            EM_ASM({
+                Module.ctx.getBufferSubData(
+                    Module.ctx.PIXEL_PACK_BUFFER,
+                    0,
+                    HEAPU8.subarray($0, $0 + $1));
+            }, ptr.get(), size);
+            // clang-format off
             writeOneFrame(ptr.get(), currentFrame);
         }
 #else
