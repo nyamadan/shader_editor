@@ -20,11 +20,14 @@ struct UniformNames {
     const char* time = nullptr;
     const char* frame = nullptr;
     const char* backbuffer = nullptr;
+    const char* matMV = nullptr;
+    const char* matMV_T = nullptr;
+    const char* matMV_IT = nullptr;
 };
 
 typedef enum {
-    GLSL_SANDBOX = 0,
-    GLSL_DEFAULT = 1,
+    GLSL_DEFAULT = 0,
+    GLSL_SANDBOX = 1,
     GLSL_CANVAS = 2,
     SHADER_TOY = 3,
 } AppShaderPlatform;
@@ -68,7 +71,7 @@ class App {
     float uiTimeValue = 0;
     bool uiPlaying = true;
 
-    AppShaderPlatform uiShaderPlatformIndex = GLSL_SANDBOX;
+    AppShaderPlatform uiShaderPlatformIndex = GLSL_DEFAULT;
     AppVideoType uiVideoTypeIndex = AppVideoType::I420;
     int32_t uiShaderFileIndex = 0;
     int32_t uiBufferQualityIndex = 2;
@@ -76,6 +79,9 @@ class App {
     int32_t uiVideoQualityIndex = 1;
     float uiVideoMbps = 1.0f;
     float uiVideoTime = 5.0f;
+
+    glm::vec3 posCamera = glm::vec3(0.0f, 0.0f, 5.0f);
+    glm::vec2 rotCamera = glm::vec2(0.0f, 0.0f);
 
     std::map<std::string, int32_t> imageUniformNameToIndex;
     std::vector<CompileError> programErrors;
@@ -89,8 +95,8 @@ class App {
     GLuint vPosition = 0;
     GLuint vertexArraysObject = 0;
 
-    std::shared_ptr<ShaderProgram> program;
-    std::shared_ptr<ShaderProgram> copyProgram;
+    PShaderProgram program;
+    PShaderProgram copyProgram;
 
     const float CheckInterval = 0.5f;
     float lastCheckUpdate = 0;
@@ -111,37 +117,34 @@ class App {
     void startRecord(const std::string& fileName, const int32_t kbps,
                      unsigned long encodeDeadline);
 
-    void SetProgramErrors(const std::vector<CompileError>& programErrors,
-                          std::shared_ptr<ShaderProgram> program);
+    void SetProgramErrors(const PShaderProgram program);
 
-    void swapProgram(std::shared_ptr<ShaderProgram> newProgram);
+    void swapProgram(PShaderProgram newProgram);
 
-    void getUsedTextures(
-        const UniformNames& uNames,
-        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
+    void getUsedTextures(const UniformNames& uNames,
+                         std::map<std::string, PImage>& usedTextures);
 
     UniformNames getCurrentUniformNames();
 
-    void setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram);
+    void setupShaderTemplate(PShaderProgram newProgram);
     void setupPlatformUniform(const UniformNames& uNames,
                               const bool* const mouseDown,
-                              const ImVec2& mousePos);
+                              const ImVec2& mousePos,
+                              const ImVec2& mouseDragDelta);
 
-    std::shared_ptr<ShaderProgram> refreshShaderProgram(float now,
-                                                        int32_t& cursorLine);
+    PShaderProgram refreshShaderProgram(float now, int32_t& cursorLine);
 
     void onUiCaptureWindow();
-    void onTextEditor();
     void onUiStatsWindow();
     void onUiErrorWindow();
     void onUiTimeWindow(float now);
     void onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
                               int32_t& currentHeight);
-    void onUiUniformWindow(
-        const UniformNames& uNames,
-        std::map<std::string, std::shared_ptr<Image>>& usedTextures);
+    void onUiUniformWindow(const UniformNames& uNames,
+                           std::map<std::string, PImage>& usedTextures);
 
     void onUiShaderFileWindow(int32_t& cursorLine);
+    void onTextEditor(int32_t& cursorLine);
 
    public:
     GLFWwindow* getMainWindow();

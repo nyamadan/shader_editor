@@ -11,11 +11,11 @@ namespace shader_editor {
 
 class ShaderFiles {
    private:
-    std::vector<std::shared_ptr<Image>> imageFiles;
+    std::vector<PImage> imageFiles;
     int32_t numImageFileNames = 0;
     char** imageFileNames = nullptr;
 
-    std::vector<std::shared_ptr<ShaderProgram>> shaderFiles;
+    std::vector<PShaderProgram> shaderFiles;
     int32_t numShaderFileNames = 0;
     char** shaderFileNames = nullptr;
 
@@ -36,14 +36,14 @@ class ShaderFiles {
 
     int32_t getNumShaderFileNames() const;
 
-    std::shared_ptr<Image> getImage(int32_t index);
-    std::shared_ptr<ShaderProgram> getShaderFile(int32_t index);
+    PImage getImage(int32_t index);
+    PShaderProgram getShaderFile(int32_t index);
 
-    int32_t pushNewProgram(std::shared_ptr<ShaderProgram> newProgram);
-    int32_t pushNewImage(std::shared_ptr<Image> image);
+    int32_t pushNewProgram(PShaderProgram newProgram);
+    int32_t pushNewImage(PImage image);
 
     void replaceNewProgram(int32_t uiShaderFileIndex,
-                           std::shared_ptr<ShaderProgram> newProgram);
+                           PShaderProgram newProgram);
 
     void loadFiles(const std::string& assetPath);
 };

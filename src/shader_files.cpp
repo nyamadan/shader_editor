@@ -49,7 +49,7 @@ void ShaderFiles::genImageFileNames() {
     numImageFileNames = static_cast<int32_t>(imageFiles.size());
     imageFileNames = new char*[numImageFileNames];
     for (int64_t i = 0; i < numImageFileNames; i++) {
-        std::shared_ptr<Image> image = imageFiles[i];
+        PImage image = imageFiles[i];
         const std::string& path = image->getPath();
         const int64_t fileNameLength = path.size();
         char* fileName = new char[fileNameLength + 1];
@@ -67,13 +67,13 @@ int32_t ShaderFiles::getNumImageFileNames() const { return numImageFileNames; }
 
 int32_t ShaderFiles::getNumShaderFileNames() const { return numShaderFileNames; }
 
-std::shared_ptr<Image> ShaderFiles::getImage(int32_t index) { return imageFiles[index]; }
+PImage ShaderFiles::getImage(int32_t index) { return imageFiles[index]; }
 
-std::shared_ptr<ShaderProgram> ShaderFiles::getShaderFile(int32_t index) {
+PShaderProgram ShaderFiles::getShaderFile(int32_t index) {
     return shaderFiles[index];
 }
 
-int32_t ShaderFiles::pushNewProgram(std::shared_ptr<ShaderProgram> newProgram) {
+int32_t ShaderFiles::pushNewProgram(PShaderProgram newProgram) {
     auto newShaderPath = fs::path(newProgram->getFragmentShader().getPath());
 
     for (auto i = 0; i < numShaderFileNames; i++) {
@@ -88,7 +88,7 @@ int32_t ShaderFiles::pushNewProgram(std::shared_ptr<ShaderProgram> newProgram) {
     return numShaderFileNames - 1;
 }
 
-int32_t ShaderFiles::pushNewImage(std::shared_ptr<Image> newImage) {
+int32_t ShaderFiles::pushNewImage(PImage newImage) {
     auto newImagePath = fs::path(newImage->getPath());
 
     for (auto i = 0; i < numImageFileNames; i++) {
@@ -104,7 +104,7 @@ int32_t ShaderFiles::pushNewImage(std::shared_ptr<Image> newImage) {
 }
 
 void ShaderFiles::replaceNewProgram(int32_t uiShaderFileIndex,
-                       std::shared_ptr<ShaderProgram> newProgram) {
+                       PShaderProgram newProgram) {
     shaderFiles[uiShaderFileIndex] = newProgram;
 }
 
@@ -119,7 +119,7 @@ void ShaderFiles::loadFiles(const std::string& dirPath) {
 
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
             AppLog::getInstance().debug("Image: %s(%s)\n", iter->c_str(), ext.c_str());
-            std::shared_ptr<Image> image = std::make_shared<Image>();
+            PImage image = std::make_shared<Image>();
             image->setPath(dirPath, *iter, ext);
             pushNewImage(image);
         }
@@ -127,7 +127,7 @@ void ShaderFiles::loadFiles(const std::string& dirPath) {
         if (ext == ".glsl" || ext == ".frag") {
             AppLog::getInstance().debug("Shader: %s(%s)\n", iter->c_str(), ext.c_str());
 
-            std::shared_ptr<ShaderProgram> newProgram =
+            PShaderProgram newProgram =
                 std::make_shared<ShaderProgram>();
 
             std::string fragmentShaderPath = fs::path(dirPath).append(file).string();

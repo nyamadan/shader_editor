@@ -1,4 +1,5 @@
 #include <string>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -76,13 +77,15 @@ namespace shader_editor {
 UniformNames App::getCurrentUniformNames() {
     UniformNames uNames;
     switch (uiShaderPlatformIndex) {
-        case GLSL_SANDBOX:
-        {
+        case GLSL_SANDBOX: {
             uNames.time = "time";
             uNames.resolution = "resolution";
             uNames.mouse = "mouse";
             uNames.backbuffer = "backbuffer";
             uNames.frame = "";
+            uNames.matMV = "";
+            uNames.matMV_T = "";
+            uNames.matMV_IT = "";
         } break;
 
         case GLSL_CANVAS: {
@@ -91,6 +94,9 @@ UniformNames App::getCurrentUniformNames() {
             uNames.mouse = "u_mouse";
             uNames.backbuffer = "u_buffer0";
             uNames.frame = "";
+            uNames.matMV = "";
+            uNames.matMV_T = "";
+            uNames.matMV_IT = "";
         } break;
 
         case SHADER_TOY: {
@@ -99,6 +105,9 @@ UniformNames App::getCurrentUniformNames() {
             uNames.mouse = "iMouse";
             uNames.frame = "iFrame";
             uNames.backbuffer = "";
+            uNames.matMV = "";
+            uNames.matMV_T = "";
+            uNames.matMV_IT = "";
         } break;
 
         case GLSL_DEFAULT:
@@ -108,6 +117,9 @@ UniformNames App::getCurrentUniformNames() {
             uNames.mouse = "mouse";
             uNames.backbuffer = "backbuffer";
             uNames.frame = "frame";
+            uNames.matMV = "mat_mv";
+            uNames.matMV_T = "mat_mv_t";
+            uNames.matMV_IT = "mat_mv_it";
         } break;
     }
 
@@ -116,18 +128,48 @@ UniformNames App::getCurrentUniformNames() {
 
 void App::setupPlatformUniform(const UniformNames& uNames,
                                const bool* const mouseDown,
-                               const ImVec2& mousePos) {
-    auto eye = glm::vec3(1.0f, 2.0f, 4.0f);
-    auto center = glm::vec3(0.0f, 0.0f, 0.0f);
-    auto up = glm::vec3(0.0f, 1.0f, 0.0f);
+                               const ImVec2& mousePos,
+                               const ImVec2& mouseDragDelta0) {
+    auto rot = glm::quat_identity<float, glm::precision::defaultp>();
 
-    auto mView = glm::lookAt(eye, center, up);
+    auto rotX = std::fmod(-0.001f * mouseDragDelta0.y + rotCamera.x, 360.0f);
+    auto rotY =
+        std::clamp(-0.001f * mouseDragDelta0.x + rotCamera.y, -45.0f, 45.0f);
+    rot = glm::rotate(rot, rotY, glm::vec3(0.0f, 1.0f, 0.0f));
+    rot = glm::rotate(rot, rotX, glm::vec3(1.0f, 0.0f, 0.0f));
+
+    if (!mouseDown[0]) {
+        rotCamera.x = rotX;
+        rotCamera.y = rotY;
+    }
+
+
+    auto spd = 2.0f * ImGui::GetIO().DeltaTime;
+    auto rotT = glm::transpose(glm::mat3_cast(rot));
+
+    if(glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
+        posCamera -= rotT * glm::vec3(0.0f, 0.0f, spd);
+    }
+
+    if(glfwGetKey(mainWindow, GLFW_KEY_S) >= GLFW_PRESS) {
+        posCamera += rotT * glm::vec3(0.0f, 0.0f, spd);
+    }
+
+    if(glfwGetKey(mainWindow, GLFW_KEY_A) >= GLFW_PRESS) {
+        posCamera -= rotT * glm::vec3(spd, 0.0f, 0.0f);
+    }
+
+    if(glfwGetKey(mainWindow, GLFW_KEY_D) >= GLFW_PRESS) {
+        posCamera += rotT * glm::vec3(spd, 0.0f, 0.0f);
+    }
+
+    auto mView = glm::mat4_cast(rot) * glm::translate(-posCamera);
     auto mViewTranspose = glm::transpose(mView);
     auto mViewInverseTranspose = glm::inverseTranspose(mView);
 
-    program->setUniformValue("mat_mv", mView);
-    program->setUniformValue("mat_mv_t", mViewTranspose);
-    program->setUniformValue("mat_mv_it", mViewInverseTranspose);
+    program->setUniformValue(uNames.matMV, mView);
+    program->setUniformValue(uNames.matMV_T, mViewTranspose);
+    program->setUniformValue(uNames.matMV_IT, mViewInverseTranspose);
 
     switch (uiShaderPlatformIndex) {
         case SHADER_TOY: {
@@ -172,7 +214,7 @@ void App::setupPlatformUniform(const UniformNames& uNames,
     }
 }
 
-void App::setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram) {
+void App::setupShaderTemplate(PShaderProgram newProgram) {
     switch (uiShaderPlatformIndex) {
         case SHADER_TOY: {
             newProgram->setFragmentShaderSourceTemplate(ShaderToyTemplate);
@@ -187,10 +229,8 @@ void App::setupShaderTemplate(std::shared_ptr<ShaderProgram> newProgram) {
     }
 }
 
-std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
-                                                         int32_t& cursorLine) {
-    std::shared_ptr<ShaderProgram> newProgram =
-        std::make_shared<ShaderProgram>();
+PShaderProgram App::refreshShaderProgram(float now, int32_t& cursorLine) {
+    PShaderProgram newProgram = std::make_shared<ShaderProgram>();
 
     newProgram->setCompileInfo(
         "<default-vertex-shader>", "<default-fragment-shader>",
@@ -215,7 +255,7 @@ std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
 
                 shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-                SetProgramErrors(programErrors, this->program);
+                SetProgramErrors(this->program);
             }
         }
 
@@ -226,7 +266,7 @@ std::shared_ptr<ShaderProgram> App::refreshShaderProgram(float now,
 }
 
 void App::update(void*) {
-    std::map<std::string, std::shared_ptr<Image>> usedTextures;
+    std::map<std::string, PImage> usedTextures;
 
     int currentWidth, currentHeight;
     float bufferScale =
@@ -266,7 +306,7 @@ void App::update(void*) {
 
         shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors, this->program);
+        SetProgramErrors(this->program);
     }
 
     if (newProgram->isOK()) {
@@ -276,8 +316,10 @@ void App::update(void*) {
     }
 
     const bool* const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2& mousePos =
+    const ImVec2 mousePos =
         ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
+
+    const ImVec2 mouseDragDelta0 = ImGui::GetMouseDragDelta(0, 5.0f);
 
     // onResizeWindow
     if (!recording->getIsRecording() &&
@@ -296,7 +338,6 @@ void App::update(void*) {
     } else {
         if (!uiPlaying) {
             timeStart = now - uiTimeValue;
-            uiTimeValue = uiTimeValue;
         } else {
             uiTimeValue = now - timeStart;
         }
@@ -314,6 +355,7 @@ void App::update(void*) {
                      ImGuiWindowFlags_AlwaysAutoResize);
 
         ImGui::Checkbox("File", &uiShaderFileWindow);
+        ImGui::Checkbox("Text Editor", &uiShowTextEditor);
         ImGui::Checkbox("Time", &uiTimeWindow);
         ImGui::Checkbox("Stats", &uiStatsWindow);
         ImGui::Checkbox("Uniforms", &uiUniformWindow);
@@ -330,6 +372,10 @@ void App::update(void*) {
 
         if (uiShaderFileWindow) {
             onUiShaderFileWindow(cursorLine);
+        }
+
+        if (uiShowTextEditor) {
+            onTextEditor(cursorLine);
         }
 
         if (uiTimeWindow) {
@@ -375,7 +421,7 @@ void App::update(void*) {
 
     // uniform values
 
-    setupPlatformUniform(uNames, mouseDown, mousePos);
+    setupPlatformUniform(uNames, mouseDown, mousePos, mouseDragDelta0);
 
     program->setUniformValue(
         uNames.resolution,
@@ -391,7 +437,7 @@ void App::update(void*) {
 
         for (auto iter = usedTextures.begin(); iter != usedTextures.end();
              iter++) {
-            std::shared_ptr<Image> image = iter->second;
+            PImage image = iter->second;
 
             if (!image->isLoaded()) {
                 image->load();
@@ -503,8 +549,7 @@ void App::startRecord(const std::string& fileName, const int32_t kbps,
                      uiVideoTypeIndex, kbps, encodeDeadline);
 }
 
-void App::SetProgramErrors(const std::vector<CompileError>& programErrors,
-                           std::shared_ptr<ShaderProgram> program) {
+void App::SetProgramErrors(PShaderProgram program) {
     std::map<int32_t, std::string> markers;
     for (auto it = programErrors.cbegin(); it != programErrors.cend(); it++) {
         const auto lineNumber = it->getLineNumber();
@@ -526,7 +571,7 @@ void App::SetProgramErrors(const std::vector<CompileError>& programErrors,
     editor.SetErrorMarkers(markers);
 }
 
-void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
+void App::swapProgram(PShaderProgram newProgram) {
     newProgram->copyAttributesFrom(*program);
     newProgram->copyUniformsFrom(*program);
 
@@ -541,7 +586,7 @@ void App::swapProgram(std::shared_ptr<ShaderProgram> newProgram) {
     program.swap(newProgram);
 }
 
-void App::onTextEditor() {
+void App::onTextEditor(int32_t& cursorLine) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin("Text Editor", &uiShowTextEditor, ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -560,7 +605,7 @@ void App::onTextEditor() {
 
                     if (saveFileDialog(path, "Shader file (*.glsl)\0*.glsl\0",
                                        "glsl")) {
-                        std::shared_ptr<ShaderProgram> newProgram =
+                        PShaderProgram newProgram =
                             std::make_shared<ShaderProgram>();
 
                         setupShaderTemplate(newProgram);
@@ -595,7 +640,7 @@ void App::onTextEditor() {
         }
 
         if (ImGui::BeginMenu("Edit")) {
-            bool ro = editor.IsReadOnly();
+            const bool ro = editor.IsReadOnly();
             if (ImGui::MenuItem("Read-only mode", nullptr, &ro))
                 editor.SetReadOnly(ro);
             ImGui::Separator();
@@ -654,6 +699,11 @@ void App::onTextEditor() {
 
     editor.Render("TextEditor");
     ImGui::End();
+
+    if (cursorLine >= 0) {
+        editor.SetCursorPosition(TextEditor::Coordinates(cursorLine, 0));
+        cursorLine = -1;
+    }
 }
 
 int32_t App::start(int32_t width, int32_t height, const std::string& assetPath,
@@ -779,8 +829,7 @@ int32_t App::start(int32_t width, int32_t height, const std::string& assetPath,
 
             uiShaderFileIndex = i;
 
-            std::shared_ptr<ShaderProgram> newProgram =
-                std::make_shared<ShaderProgram>();
+            PShaderProgram newProgram = std::make_shared<ShaderProgram>();
 
             setupShaderTemplate(newProgram);
 
@@ -790,7 +839,7 @@ int32_t App::start(int32_t width, int32_t height, const std::string& assetPath,
             editor.SetText(newProgram->getFragmentShader().getSource());
             editor.SetCursorPosition(TextEditor::Coordinates());
             programErrors = newProgram->getFragmentShader().getErrors();
-            SetProgramErrors(programErrors, this->program);
+            SetProgramErrors(this->program);
             program.swap(newProgram);
             break;
         }
@@ -814,9 +863,8 @@ void App::cleanup() {
     h264encoder::UnloadEncoderLibrary();
 }
 
-void App::getUsedTextures(
-    const UniformNames& uNames,
-    std::map<std::string, std::shared_ptr<Image>>& usedTextures) {
+void App::getUsedTextures(const UniformNames& uNames,
+                          std::map<std::string, PImage>& usedTextures) {
     usedTextures.clear();
     if (shaderFiles.getNumImageFileNames() > 0) {
         auto& uniforms = program->getUniforms();
@@ -1003,9 +1051,8 @@ void App::onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
     ImGui::End();
 }
 
-void App::onUiUniformWindow(
-    const UniformNames& uNames,
-    std::map<std::string, std::shared_ptr<Image>>& usedTextures) {
+void App::onUiUniformWindow(const UniformNames& uNames,
+                            std::map<std::string, PImage>& usedTextures) {
     ImGui::Begin("Uniforms", &uiUniformWindow,
                  ImGuiWindowFlags_AlwaysAutoResize);
     std::map<const std::string, ShaderUniform>& uniforms =
@@ -1018,7 +1065,8 @@ void App::onUiUniformWindow(
 
         if (u.name == uNames.time || u.name == uNames.resolution ||
             u.name == uNames.mouse || u.name == uNames.frame ||
-            u.name == uNames.backbuffer) {
+            u.name == uNames.backbuffer || u.name == uNames.matMV ||
+            u.name == uNames.matMV_T || u.name == uNames.matMV_IT) {
             ImGui::LabelText(u.name.c_str(), "%s", u.toString().c_str());
             continue;
         }
@@ -1064,8 +1112,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
     if (ImGui::Combo("platform", (int32_t*)&uiShaderPlatformIndex,
                      AppShaderPlatformNames,
                      IM_ARRAYSIZE(AppShaderPlatformNames))) {
-        std::shared_ptr<ShaderProgram> newProgram =
-            std::make_shared<ShaderProgram>();
+        PShaderProgram newProgram = std::make_shared<ShaderProgram>();
 
         setupShaderTemplate(newProgram);
 
@@ -1076,7 +1123,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
         }
         shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors, newProgram);
+        SetProgramErrors(newProgram);
 
         swapProgram(newProgram);
 
@@ -1102,22 +1149,11 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
 
         shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
 
-        SetProgramErrors(programErrors, newProgram);
+        SetProgramErrors(newProgram);
 
         swapProgram(newProgram);
 
         needRecompile = false;
-    }
-
-    ImGui::Checkbox("TextEditor", &uiShowTextEditor);
-
-    if (uiShowTextEditor) {
-        onTextEditor();
-
-        if (cursorLine >= 0) {
-            editor.SetCursorPosition(TextEditor::Coordinates(cursorLine, 0));
-            cursorLine = -1;
-        }
     }
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
@@ -1125,8 +1161,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
         std::string path;
 
         if (openFileDialog(path, "Shader file (*.glsl)\0*.glsl\0")) {
-            std::shared_ptr<ShaderProgram> newProgram =
-                std::make_shared<ShaderProgram>();
+            PShaderProgram newProgram = std::make_shared<ShaderProgram>();
 
             setupShaderTemplate(newProgram);
 
@@ -1140,7 +1175,7 @@ void App::onUiShaderFileWindow(int32_t& cursorLine) {
                 cursorLine = programErrors.begin()->getLineNumber() - 1;
             }
 
-            SetProgramErrors(programErrors, newProgram);
+            SetProgramErrors(newProgram);
 
             uiShaderFileIndex = shaderFiles.pushNewProgram(newProgram);
 

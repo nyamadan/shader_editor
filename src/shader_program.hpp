@@ -206,4 +206,7 @@ class ShaderProgram {
                    const std::string &vsSource, const std::string &fsSource,
                    int64_t vsMTime, int64_t fsMTime);
 };
+
+using PShaderProgram = std::shared_ptr<ShaderProgram>;
+
 }  // namespace shader_editor

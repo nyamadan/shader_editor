@@ -29,3 +29,5 @@ class Image {
 
     uint32_t getTexture() const;
 };
+
+using PImage = std::shared_ptr<Image>;
