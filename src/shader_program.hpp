@@ -85,6 +85,8 @@ enum UniformType {
     Vector2,
     Vector3,
     Vector4,
+    Mat3x3,
+    Mat4x4,
     Sampler2D,
 };
 
@@ -95,6 +97,8 @@ union ShaderUniformValue {
     glm::vec2 vec2;
     glm::vec3 vec3;
     glm::vec4 vec4;
+    glm::mat3x3 mat3x3;
+    glm::mat4x4 mat4x4;
 };
 
 struct ShaderUniform {
@@ -144,6 +148,8 @@ class ShaderProgram {
     void setUniformVector2(const std::string &name, const glm::vec2 &value);
     void setUniformVector3(const std::string &name, const glm::vec3 &value);
     void setUniformVector4(const std::string &name, const glm::vec4 &value);
+    void setUniformMat3x3(const std::string &name, const glm::mat3x3 &value);
+    void setUniformMat4x4(const std::string &name, const glm::mat4x4 &value);
 
     void loadUniforms();
     void loadAttributes();
@@ -162,6 +168,8 @@ class ShaderProgram {
     void setUniformValue(const std::string &name, const glm::vec2 &value);
     void setUniformValue(const std::string &name, const glm::vec3 &value);
     void setUniformValue(const std::string &name, const glm::vec4 &value);
+    void setUniformValue(const std::string &name, const glm::mat3x3 &value);
+    void setUniformValue(const std::string &name, const glm::mat4x4 &value);
     void setUniformValue(const std::string &name, float value);
     void setUniformValue(const std::string &name, int32_t value);
 

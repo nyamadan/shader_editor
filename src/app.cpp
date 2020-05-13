@@ -117,6 +117,18 @@ UniformNames App::getCurrentUniformNames() {
 void App::setupPlatformUniform(const UniformNames& uNames,
                                const bool* const mouseDown,
                                const ImVec2& mousePos) {
+    auto eye = glm::vec3(1.0f, 2.0f, 4.0f);
+    auto center = glm::vec3(0.0f, 0.0f, 0.0f);
+    auto up = glm::vec3(0.0f, 1.0f, 0.0f);
+
+    auto mView = glm::lookAt(eye, center, up);
+    auto mViewTranspose = glm::transpose(mView);
+    auto mViewInverseTranspose = glm::inverseTranspose(mView);
+
+    program->setUniformValue("mat_mv", mView);
+    program->setUniformValue("mat_mv_t", mViewTranspose);
+    program->setUniformValue("mat_mv_it", mViewInverseTranspose);
+
     switch (uiShaderPlatformIndex) {
         case SHADER_TOY: {
             program->setUniformValue(uNames.frame,

@@ -353,6 +353,20 @@ void ShaderProgram::setUniformVector4(const std::string &name,
     u.value.vec4 = value;
 }
 
+void ShaderProgram::setUniformMat3x3(const std::string &name,
+                                     const glm::mat3x3 &value) {
+    ShaderUniform &u = uniforms[name];
+    u.name = name;
+    u.value.mat3x3 = value;
+}
+
+void ShaderProgram::setUniformMat4x4(const std::string &name,
+                                     const glm::mat4x4 &value) {
+    ShaderUniform &u = uniforms[name];
+    u.name = name;
+    u.value.mat4x4 = value;
+}
+
 void ShaderProgram::setUniformValue(const std::string &name,
                                     const glm::vec2 &value) {
     this->setUniformVector2(name, value);
@@ -366,6 +380,16 @@ void ShaderProgram::setUniformValue(const std::string &name,
 void ShaderProgram::setUniformValue(const std::string &name,
                                     const glm::vec4 &value) {
     this->setUniformVector4(name, value);
+}
+
+void ShaderProgram::setUniformValue(const std::string &name,
+                                    const glm::mat3x3 &value) {
+    this->setUniformMat3x3(name, value);
+}
+
+void ShaderProgram::setUniformValue(const std::string &name,
+                                    const glm::mat4x4 &value) {
+    this->setUniformMat4x4(name, value);
 }
 
 bool ShaderProgram::containsUniform(const std::string &name) const {
@@ -439,6 +463,12 @@ void ShaderProgram::applyUniforms() {
                 break;
             case UniformType::Vector4:
                 glUniform4fv(u.location, 1, glm::value_ptr(u.value.vec4));
+                break;
+            case UniformType::Mat3x3:
+                glUniformMatrix3fv(u.location, 1, false, glm::value_ptr(u.value.mat3x3));
+                break;
+            case UniformType::Mat4x4:
+                glUniformMatrix4fv(u.location, 1, false, glm::value_ptr(u.value.mat4x4));
                 break;
         }
     }
@@ -583,6 +613,18 @@ void ShaderProgram::loadUniforms() {
                 setUniformValue(name, glm::vec4(0.0f, 0.0f, 0.0f, 0.0f));
                 AppLog::getInstance().debug(
                     "Uniform #%d Type: Vector4, Name: %s\n", i, name);
+                break;
+            case GL_FLOAT_MAT3:
+                uniform(name, UniformType::Mat3x3);
+                setUniformValue(name, glm::mat3x3());
+                AppLog::getInstance().debug(
+                    "Uniform #%d Type: Mat3x3, Name: %s\n", i, name);
+                break;
+            case GL_FLOAT_MAT4:
+                uniform(name, UniformType::Mat4x4);
+                setUniformValue(name, glm::mat4x4());
+                AppLog::getInstance().debug(
+                    "Uniform #%d Type: Mat4x4, Name: %s\n", i, name);
                 break;
             case GL_INT:
                 uniform(name, UniformType::Integer);
