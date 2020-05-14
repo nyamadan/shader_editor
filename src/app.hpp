@@ -58,6 +58,7 @@ class App {
 #endif
     bool uiShaderFileWindow = false;
     bool uiTimeWindow = false;
+    bool uiCameraWindow = false;
     bool uiStatsWindow = false;
     bool uiUniformWindow = false;
     bool uiBackBufferWindow = false;
@@ -127,10 +128,7 @@ class App {
     UniformNames getCurrentUniformNames();
 
     void setupShaderTemplate(PShaderProgram newProgram);
-    void setupPlatformUniform(const UniformNames& uNames,
-                              const bool* const mouseDown,
-                              const ImVec2& mousePos,
-                              const ImVec2& mouseDragDelta);
+    void setupPlatformUniform(const UniformNames& uNames);
 
     PShaderProgram refreshShaderProgram(float now, int32_t& cursorLine);
 

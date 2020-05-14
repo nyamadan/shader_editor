@@ -126,10 +126,13 @@ UniformNames App::getCurrentUniformNames() {
     return uNames;
 }
 
-void App::setupPlatformUniform(const UniformNames& uNames,
-                               const bool* const mouseDown,
-                               const ImVec2& mousePos,
-                               const ImVec2& mouseDragDelta0) {
+void App::setupPlatformUniform(const UniformNames& uNames) {
+    const bool* const mouseDown = ImGui::GetIO().MouseDown;
+    const ImVec2 mousePos =
+        ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
+
+    const ImVec2 mouseDragDelta0 = ImGui::GetMouseDragDelta(0, 5.0f);
+
     auto rot = glm::quat_identity<float, glm::precision::defaultp>();
 
     auto rotX = std::fmod(-0.001f * mouseDragDelta0.y + rotCamera.x, 360.0f);
@@ -357,6 +360,7 @@ void App::update(void*) {
         ImGui::Checkbox("File", &uiShaderFileWindow);
         ImGui::Checkbox("Text Editor", &uiShowTextEditor);
         ImGui::Checkbox("Time", &uiTimeWindow);
+        ImGui::Checkbox("Camera", &uiCameraWindow);
         ImGui::Checkbox("Stats", &uiStatsWindow);
         ImGui::Checkbox("Uniforms", &uiUniformWindow);
         ImGui::Checkbox("Buffer Size", &uiBackBufferWindow);
@@ -380,6 +384,18 @@ void App::update(void*) {
 
         if (uiTimeWindow) {
             onUiTimeWindow(now);
+        }
+
+        if (uiCameraWindow) {
+            ImGui::Begin("Camera", &uiCameraWindow,
+                         ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::LabelText("Position", "%f, %f, %f", posCamera.x, posCamera.y, posCamera.z);
+            ImGui::LabelText("Rotation", "%f, %f", rotCamera.x, rotCamera.y);
+            if (ImGui::Button("Reset")) {
+                posCamera = glm::vec3(0.0f, 0.0f, 5.0f);
+                rotCamera = glm::vec2(0.0f, 0.0f);
+            }
+            ImGui::End();
         }
 
         if (uiCaptureWindow) {
@@ -421,7 +437,7 @@ void App::update(void*) {
 
     // uniform values
 
-    setupPlatformUniform(uNames, mouseDown, mousePos, mouseDragDelta0);
+    setupPlatformUniform(uNames);
 
     program->setUniformValue(
         uNames.resolution,
