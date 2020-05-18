@@ -146,23 +146,22 @@ void App::setupPlatformUniform(const UniformNames& uNames) {
         rotCamera.y = rotY;
     }
 
-
     auto spd = 2.0f * ImGui::GetIO().DeltaTime;
     auto rotT = glm::transpose(glm::mat3_cast(rot));
 
-    if(glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
+    if (glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
         posCamera -= rotT * glm::vec3(0.0f, 0.0f, spd);
     }
 
-    if(glfwGetKey(mainWindow, GLFW_KEY_S) >= GLFW_PRESS) {
+    if (glfwGetKey(mainWindow, GLFW_KEY_S) >= GLFW_PRESS) {
         posCamera += rotT * glm::vec3(0.0f, 0.0f, spd);
     }
 
-    if(glfwGetKey(mainWindow, GLFW_KEY_A) >= GLFW_PRESS) {
+    if (glfwGetKey(mainWindow, GLFW_KEY_A) >= GLFW_PRESS) {
         posCamera -= rotT * glm::vec3(spd, 0.0f, 0.0f);
     }
 
-    if(glfwGetKey(mainWindow, GLFW_KEY_D) >= GLFW_PRESS) {
+    if (glfwGetKey(mainWindow, GLFW_KEY_D) >= GLFW_PRESS) {
         posCamera += rotT * glm::vec3(spd, 0.0f, 0.0f);
     }
 
@@ -389,7 +388,8 @@ void App::update(void*) {
         if (uiCameraWindow) {
             ImGui::Begin("Camera", &uiCameraWindow,
                          ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::LabelText("Position", "%f, %f, %f", posCamera.x, posCamera.y, posCamera.z);
+            ImGui::LabelText("Position", "%f, %f, %f", posCamera.x, posCamera.y,
+                             posCamera.z);
             ImGui::LabelText("Rotation", "%f, %f", rotCamera.x, rotCamera.y);
             if (ImGui::Button("Reset")) {
                 posCamera = glm::vec3(0.0f, 0.0f, 5.0f);
