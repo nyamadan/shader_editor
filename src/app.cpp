@@ -127,21 +127,26 @@ UniformNames App::getCurrentUniformNames() {
 }
 
 void App::setupPlatformUniform(const UniformNames& uNames) {
-    const bool* const mouseDown = ImGui::GetIO().MouseDown;
-    const ImVec2 mousePos =
-        ImGui::IsMousePosValid() ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool* const mouseDown = io.MouseDown;
+    const bool wantCaptureKeyboard = io.WantCaptureKeyboard;
+    const bool isMousePosValid = ImGui::IsMousePosValid();
 
-    const ImVec2 mouseDragDelta0 = ImGui::GetMouseDragDelta(0, 5.0f);
+    const ImVec2 mousePos =
+        isMousePosValid ? ImGui::GetMousePos() : ImVec2(0.5f, 0.5f);
+    const ImVec2 mouseDragDelta0 =
+        wantCaptureKeyboard ? ImVec2(0.0f, 0.0f) : ImGui::GetMouseDragDelta(0);
 
     auto rot = glm::quat_identity<float, glm::precision::defaultp>();
 
     auto rotX = std::fmod(-0.001f * mouseDragDelta0.y + rotCamera.x, 360.0f);
     auto rotY =
         std::clamp(-0.001f * mouseDragDelta0.x + rotCamera.y, -45.0f, 45.0f);
+
     rot = glm::rotate(rot, rotY, glm::vec3(0.0f, 1.0f, 0.0f));
     rot = glm::rotate(rot, rotX, glm::vec3(1.0f, 0.0f, 0.0f));
 
-    if (!mouseDown[0]) {
+    if(!wantCaptureKeyboard && !mouseDown[0]) {
         rotCamera.x = rotX;
         rotCamera.y = rotY;
     }
@@ -149,20 +154,23 @@ void App::setupPlatformUniform(const UniformNames& uNames) {
     auto spd = 2.0f * ImGui::GetIO().DeltaTime;
     auto rotT = glm::transpose(glm::mat3_cast(rot));
 
-    if (glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
-        posCamera -= rotT * glm::vec3(0.0f, 0.0f, spd);
-    }
+    if(!wantCaptureKeyboard) 
+    {
+        if (glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
+            posCamera -= rotT * glm::vec3(0.0f, 0.0f, spd);
+        }
 
-    if (glfwGetKey(mainWindow, GLFW_KEY_S) >= GLFW_PRESS) {
-        posCamera += rotT * glm::vec3(0.0f, 0.0f, spd);
-    }
+        if (glfwGetKey(mainWindow, GLFW_KEY_S) >= GLFW_PRESS) {
+            posCamera += rotT * glm::vec3(0.0f, 0.0f, spd);
+        }
 
-    if (glfwGetKey(mainWindow, GLFW_KEY_A) >= GLFW_PRESS) {
-        posCamera -= rotT * glm::vec3(spd, 0.0f, 0.0f);
-    }
+        if (glfwGetKey(mainWindow, GLFW_KEY_A) >= GLFW_PRESS) {
+            posCamera -= rotT * glm::vec3(spd, 0.0f, 0.0f);
+        }
 
-    if (glfwGetKey(mainWindow, GLFW_KEY_D) >= GLFW_PRESS) {
-        posCamera += rotT * glm::vec3(spd, 0.0f, 0.0f);
+        if (glfwGetKey(mainWindow, GLFW_KEY_D) >= GLFW_PRESS) {
+            posCamera += rotT * glm::vec3(spd, 0.0f, 0.0f);
+        }
     }
 
     auto mView = glm::mat4_cast(rot) * glm::translate(-posCamera);
