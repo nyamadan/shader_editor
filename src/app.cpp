@@ -137,7 +137,7 @@ void App::setupPlatformUniform(const UniformNames& uNames) {
     const ImVec2 mouseDragDelta0 =
         wantCaptureKeyboard ? ImVec2(0.0f, 0.0f) : ImGui::GetMouseDragDelta(0);
 
-    auto rot = glm::quat_identity<float, glm::precision::defaultp>();
+    auto rot = glm::quat(1.0f, 0.0, 0.0f, 0.0f);
 
     auto rotX = std::fmod(-0.001f * mouseDragDelta0.y + rotCamera.x, 360.0f);
     auto rotY =
@@ -146,7 +146,7 @@ void App::setupPlatformUniform(const UniformNames& uNames) {
     rot = glm::rotate(rot, rotY, glm::vec3(0.0f, 1.0f, 0.0f));
     rot = glm::rotate(rot, rotX, glm::vec3(1.0f, 0.0f, 0.0f));
 
-    if(!wantCaptureKeyboard && !mouseDown[0]) {
+    if (!wantCaptureKeyboard && !mouseDown[0]) {
         rotCamera.x = rotX;
         rotCamera.y = rotY;
     }
@@ -154,8 +154,7 @@ void App::setupPlatformUniform(const UniformNames& uNames) {
     auto spd = 2.0f * ImGui::GetIO().DeltaTime;
     auto rotT = glm::transpose(glm::mat3_cast(rot));
 
-    if(!wantCaptureKeyboard) 
-    {
+    if (!wantCaptureKeyboard) {
         if (glfwGetKey(mainWindow, GLFW_KEY_W) >= GLFW_PRESS) {
             posCamera -= rotT * glm::vec3(0.0f, 0.0f, spd);
         }
@@ -361,32 +360,167 @@ void App::update(void*) {
     }
 
     if (uiDebugWindow) {
-        ImGui::Begin("Control", &uiDebugWindow,
-                     ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+#if defined(_MSC_VER) || defined(__MINGW32__)
+                if (ImGui::MenuItem("Open")) {
+                    std::string path;
 
-        ImGui::Checkbox("File", &uiShaderFileWindow);
-        ImGui::Checkbox("Text Editor", &uiShowTextEditor);
-        ImGui::Checkbox("Time", &uiTimeWindow);
-        ImGui::Checkbox("Camera", &uiCameraWindow);
-        ImGui::Checkbox("Stats", &uiStatsWindow);
-        ImGui::Checkbox("Uniforms", &uiUniformWindow);
-        ImGui::Checkbox("Buffer Size", &uiBackBufferWindow);
-        ImGui::Checkbox("Save as Video", &uiCaptureWindow);
-        ImGui::Checkbox("Errors", &uiErrorWindow);
-        ImGui::Checkbox("Log", &uiAppLogWindow);
+                    if (openFileDialog(path,
+                                       "Shader file (*.glsl)\0*.glsl\0")) {
+                        PShaderProgram newProgram =
+                            std::make_shared<ShaderProgram>();
 
-#ifndef NDEBUG
-        ImGui::Checkbox("ImGui Demo Window", &showImGuiDemoWindow);
+                        setupShaderTemplate(newProgram);
+
+                        compileShaderFromFile(
+                            newProgram, program->getVertexShader().getPath(),
+                            path);
+                        editor.SetText(
+                            newProgram->getFragmentShader().getSource());
+                        editor.SetCursorPosition(TextEditor::Coordinates());
+
+                        programErrors =
+                            newProgram->getFragmentShader().getErrors();
+                        if (programErrors.begin() != programErrors.end()) {
+                            cursorLine =
+                                programErrors.begin()->getLineNumber() - 1;
+                        }
+
+                        SetProgramErrors(newProgram);
+
+                        uiShaderFileIndex =
+                            shaderFiles.pushNewProgram(newProgram);
+
+                        program.swap(newProgram);
+
+                        shaderFiles.loadFiles(
+                            fs::path(path).parent_path().string());
+                    }
+                }
 #endif
 
-        ImGui::End();
+                if (ImGui::BeginMenu("Shader Files")) {
+                    for (auto i = 0; i < shaderFiles.getNumShaderFileNames();
+                         i++) {
+                        if (ImGui::MenuItem(shaderFiles.getShaderFileNames()[i],
+                                            nullptr, i == uiShaderFileIndex)) {
+                            uiShaderFileIndex = i;
 
-        if (uiShaderFileWindow) {
-            onUiShaderFileWindow(cursorLine);
+                            auto newProgram =
+                                shaderFiles.getShaderFile(uiShaderFileIndex);
+
+                            setupShaderTemplate(newProgram);
+
+                            newProgram->compile();
+
+                            editor.SetText(
+                                newProgram->getFragmentShader().getSource());
+                            editor.SetCursorPosition(TextEditor::Coordinates());
+
+                            programErrors =
+                                newProgram->getFragmentShader().getErrors();
+                            if (programErrors.begin() != programErrors.end()) {
+                                cursorLine =
+                                    programErrors.begin()->getLineNumber() - 1;
+                            }
+
+                            shaderFiles.replaceNewProgram(uiShaderFileIndex,
+                                                          newProgram);
+
+                            SetProgramErrors(newProgram);
+
+                            swapProgram(newProgram);
+
+                            needRecompile = false;
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
+                ImGui::MenuItem("Export as Video", nullptr, &uiCaptureWindow);
+
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Shader")) {
+                if (ImGui::BeginMenu("Platform")) {
+                    for (auto i = 0; i < IM_ARRAYSIZE(AppShaderPlatformNames);
+                         i++) {
+                        if (ImGui::MenuItem(AppShaderPlatformNames[i], nullptr,
+                                            i == uiShaderPlatformIndex)) {
+                            uiShaderPlatformIndex = (AppShaderPlatform)i;
+                            PShaderProgram newProgram =
+                                std::make_shared<ShaderProgram>();
+
+                            setupShaderTemplate(newProgram);
+
+                            recompileFragmentShader(program, newProgram,
+                                                    editor.GetText());
+                            programErrors =
+                                newProgram->getFragmentShader().getErrors();
+                            if (programErrors.begin() != programErrors.end()) {
+                                cursorLine =
+                                    programErrors.begin()->getLineNumber() - 1;
+                            }
+                            shaderFiles.replaceNewProgram(uiShaderFileIndex,
+                                                          newProgram);
+
+                            SetProgramErrors(newProgram);
+
+                            swapProgram(newProgram);
+
+                            needRecompile = false;
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::BeginMenu("Buffer Size")) {
+                    const char* const items[] = {"0.5", "1", "2", "4", "8"};
+                    for (auto i = 0; i < IM_ARRAYSIZE(items); i++) {
+                        if (!ImGui::MenuItem(items[i], nullptr,
+                                             i == uiBufferQualityIndex)) {
+                            continue;
+                        }
+
+                        uiBufferQualityIndex = i;
+
+                        // update framebuffers
+                        bufferScale =
+                            1.0f / powf(2.0f, static_cast<float>(
+                                                  uiBufferQualityIndex - 1));
+                        buffers.updateFrameBuffersSize(
+                            static_cast<GLint>(currentWidth * bufferScale),
+                            static_cast<GLint>(currentHeight * bufferScale));
+                    }
+
+                    ImGui::EndMenu();
+                }
+
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("TextEditor", nullptr, &uiShowTextEditor);
+                ImGui::MenuItem("Stats", nullptr, &uiStatsWindow);
+                ImGui::MenuItem("Time", nullptr, &uiTimeWindow);
+                ImGui::MenuItem("Camera", nullptr, &uiCameraWindow);
+                ImGui::MenuItem("Uniforms", nullptr, &uiUniformWindow);
+                ImGui::MenuItem("Errors", nullptr, &uiErrorWindow);
+                ImGui::MenuItem("Log", nullptr, &uiAppLogWindow);
+
+#ifndef NDEBUG
+                ImGui::MenuItem("ImGui Demo Window", nullptr,
+                                &showImGuiDemoWindow);
+#endif
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
         }
 
         if (uiShowTextEditor) {
-            onTextEditor(cursorLine);
+            onTextEditor(bufferScale, currentWidth, currentHeight, cursorLine);
         }
 
         if (uiTimeWindow) {
@@ -416,10 +550,6 @@ void App::update(void*) {
 
         if (uiUniformWindow) {
             onUiUniformWindow(uNames, usedTextures);
-        }
-
-        if (uiBackBufferWindow) {
-            onUiBackBufferWindow(bufferScale, currentWidth, currentHeight);
         }
 
         if (uiErrorWindow) {
@@ -610,7 +740,8 @@ void App::swapProgram(PShaderProgram newProgram) {
     program.swap(newProgram);
 }
 
-void App::onTextEditor(int32_t& cursorLine) {
+void App::onTextEditor(float& bufferScale, int32_t& currentWidth,
+                       int32_t& currentHeight, int32_t& cursorLine) {
     auto cpos = editor.GetCursorPosition();
     ImGui::Begin("Text Editor", &uiShowTextEditor, ImGuiWindowFlags_MenuBar);
     ImGui::SetWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
@@ -654,10 +785,6 @@ void App::onTextEditor(int32_t& cursorLine) {
                         program.swap(newProgram);
                     }
                 }
-            }
-
-            if (ImGui::MenuItem("Close")) {
-                uiShowTextEditor = false;
             }
 
             ImGui::EndMenu();
@@ -711,6 +838,7 @@ void App::onTextEditor(int32_t& cursorLine) {
                 editor.SetPalette(TextEditor::GetRetroBluePalette());
             ImGui::EndMenu();
         }
+
         ImGui::EndMenuBar();
     }
 
@@ -1029,6 +1157,15 @@ void App::onUiStatsWindow() {
     ss.str(std::string());
     ss << ImGui::GetIO().Framerate;
     ImGui::LabelText("fps", "%s", ss.str().c_str());
+
+    std::stringstream windowStringStream;
+    windowStringStream << windowWidth << ", " << windowHeight;
+    ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
+
+    std::stringstream bufferStringStream;
+    bufferStringStream << buffers.getWidth() << ", " << buffers.getHeight();
+    ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
+
     ImGui::End();
 }
 
@@ -1047,31 +1184,6 @@ void App::onUiTimeWindow(float now) {
         uiTimeValue = 0;
         currentFrame = 0;
     }
-    ImGui::End();
-}
-
-void App::onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
-                               int32_t& currentHeight) {
-    ImGui::Begin("Buffer Size", &uiBackBufferWindow,
-                 ImGuiWindowFlags_AlwaysAutoResize);
-    const char* const items[] = {"0.5", "1", "2", "4", "8"};
-    if (ImGui::Combo("quality", &uiBufferQualityIndex, items,
-                     IM_ARRAYSIZE(items))) {
-        // update framebuffers
-        bufferScale =
-            1.0f / powf(2.0f, static_cast<float>(uiBufferQualityIndex - 1));
-        buffers.updateFrameBuffersSize(
-            static_cast<GLint>(currentWidth * bufferScale),
-            static_cast<GLint>(currentHeight * bufferScale));
-    }
-
-    std::stringstream windowStringStream;
-    windowStringStream << windowWidth << ", " << windowHeight;
-    ImGui::LabelText("window", "%s", windowStringStream.str().c_str());
-
-    std::stringstream bufferStringStream;
-    bufferStringStream << buffers.getWidth() << ", " << buffers.getHeight();
-    ImGui::LabelText("buffer", "%s", bufferStringStream.str().c_str());
     ImGui::End();
 }
 
@@ -1126,90 +1238,6 @@ void App::onUiUniformWindow(const UniformNames& uNames,
                 break;
         }
     }
-    ImGui::End();
-}
-
-void App::onUiShaderFileWindow(int32_t& cursorLine) {
-    ImGui::Begin("File", &uiShaderFileWindow,
-                 ImGuiWindowFlags_AlwaysAutoResize);
-
-    if (ImGui::Combo("platform", (int32_t*)&uiShaderPlatformIndex,
-                     AppShaderPlatformNames,
-                     IM_ARRAYSIZE(AppShaderPlatformNames))) {
-        PShaderProgram newProgram = std::make_shared<ShaderProgram>();
-
-        setupShaderTemplate(newProgram);
-
-        recompileFragmentShader(program, newProgram, editor.GetText());
-        programErrors = newProgram->getFragmentShader().getErrors();
-        if (programErrors.begin() != programErrors.end()) {
-            cursorLine = programErrors.begin()->getLineNumber() - 1;
-        }
-        shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
-
-        SetProgramErrors(newProgram);
-
-        swapProgram(newProgram);
-
-        needRecompile = false;
-    }
-
-    if (ImGui::Combo("File", &uiShaderFileIndex,
-                     shaderFiles.getShaderFileNames(),
-                     shaderFiles.getNumShaderFileNames())) {
-        auto newProgram = shaderFiles.getShaderFile(uiShaderFileIndex);
-
-        setupShaderTemplate(newProgram);
-
-        newProgram->compile();
-
-        editor.SetText(newProgram->getFragmentShader().getSource());
-        editor.SetCursorPosition(TextEditor::Coordinates());
-
-        programErrors = newProgram->getFragmentShader().getErrors();
-        if (programErrors.begin() != programErrors.end()) {
-            cursorLine = programErrors.begin()->getLineNumber() - 1;
-        }
-
-        shaderFiles.replaceNewProgram(uiShaderFileIndex, newProgram);
-
-        SetProgramErrors(newProgram);
-
-        swapProgram(newProgram);
-
-        needRecompile = false;
-    }
-
-#if defined(_MSC_VER) || defined(__MINGW32__)
-    if (ImGui::Button("Open")) {
-        std::string path;
-
-        if (openFileDialog(path, "Shader file (*.glsl)\0*.glsl\0")) {
-            PShaderProgram newProgram = std::make_shared<ShaderProgram>();
-
-            setupShaderTemplate(newProgram);
-
-            compileShaderFromFile(newProgram,
-                                  program->getVertexShader().getPath(), path);
-            editor.SetText(newProgram->getFragmentShader().getSource());
-            editor.SetCursorPosition(TextEditor::Coordinates());
-
-            programErrors = newProgram->getFragmentShader().getErrors();
-            if (programErrors.begin() != programErrors.end()) {
-                cursorLine = programErrors.begin()->getLineNumber() - 1;
-            }
-
-            SetProgramErrors(newProgram);
-
-            uiShaderFileIndex = shaderFiles.pushNewProgram(newProgram);
-
-            program.swap(newProgram);
-
-            shaderFiles.loadFiles(fs::path(path).parent_path().string());
-        }
-    }
-#endif
-
     ImGui::End();
 }
 

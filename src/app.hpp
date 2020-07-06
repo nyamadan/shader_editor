@@ -56,16 +56,14 @@ class App {
 #ifndef NDEBUG
     bool showImGuiDemoWindow = false;
 #endif
-    bool uiShaderFileWindow = false;
     bool uiTimeWindow = false;
     bool uiCameraWindow = false;
     bool uiStatsWindow = false;
     bool uiUniformWindow = false;
-    bool uiBackBufferWindow = false;
     bool uiCaptureWindow = false;
 
     bool uiDebugWindow = true;
-    bool uiShowTextEditor = false;
+    bool uiShowTextEditor = true;
     bool uiErrorWindow = false;
     bool uiAppLogWindow = false;
 
@@ -136,13 +134,11 @@ class App {
     void onUiStatsWindow();
     void onUiErrorWindow();
     void onUiTimeWindow(float now);
-    void onUiBackBufferWindow(float& bufferScale, int32_t& currentWidth,
-                              int32_t& currentHeight);
     void onUiUniformWindow(const UniformNames& uNames,
                            std::map<std::string, PImage>& usedTextures);
 
-    void onUiShaderFileWindow(int32_t& cursorLine);
-    void onTextEditor(int32_t& cursorLine);
+    void onTextEditor(float& bufferScale, int32_t& currentWidth,
+                              int32_t& currentHeight, int32_t& cursorLine);
 
    public:
     GLFWwindow* getMainWindow();
