@@ -919,6 +919,8 @@ int32_t App::start(int32_t width, int32_t height, const std::string& assetPath,
 
     ImGui::StyleColorsClassic();
 
+    ImGui::GetIO().IniFilename = nullptr;
+
     glfwMakeContextCurrent(mainWindow);
 
     // Compile shaders.
